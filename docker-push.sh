@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# Read the version from VERSION file and trim whitespace
+VERSION=$(cat VERSION | tr -d '[:space:]')
+IMAGE_NAME="grvsoni/flask-counter"
+
+# Run tests locally first
+echo "Running tests locally..."
+python -m pytest -v
+if [ $? -ne 0 ]; then
+    echo "Tests failed! Aborting build."
+    exit 1
+fi
+
+# Build the versioned image
+echo "Building image ${IMAGE_NAME}:v${VERSION}..."
+docker build -t "${IMAGE_NAME}:v${VERSION}" .
+if [ $? -ne 0 ]; then
+    echo "Build failed!"
+    exit 1
+fi
+
+# Tag as latest
+echo "Tagging as latest..."
+docker tag "${IMAGE_NAME}:v${VERSION}" "${IMAGE_NAME}:latest"
+
+# Push both tags
+echo "Pushing version ${VERSION}..."
+docker push "${IMAGE_NAME}:v${VERSION}"
+echo "Pushing latest tag..."
+docker push "${IMAGE_NAME}:latest"
+
+echo "Successfully pushed ${IMAGE_NAME}:v${VERSION} and ${IMAGE_NAME}:latest" 
