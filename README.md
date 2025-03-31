@@ -9,7 +9,7 @@ A simple Flask application that displays a visit counter and current UTC time. T
 - Responsive design for mobile, tablet, and desktop
 - Dark mode support
 - Health check endpoint
-- Docker support
+- Docker and Kubernetes support
 
 ## Running Locally
 
@@ -75,20 +75,83 @@ docker run -d -p 3000:3000 --name flask-app grvsoni/flask-counter
 
 The application will be available at `http://localhost:3000`
 
-### Docker Container Management
+## Kubernetes Deployment
+
+### Prerequisites
+
+- Kubernetes cluster (local or cloud)
+- kubectl CLI tool
+- Access to Docker Hub (to pull the image)
+
+### Deployment Steps
+
+1. Create the Kubernetes namespace and resources:
 
 ```bash
-# Stop the container
-docker stop flask-app
+# Create namespace and deploy all resources
+kubectl apply -f k8s/
 
-# Start an existing container
-docker start flask-app
+# Or deploy resources individually
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+kubectl apply -f k8s/hpa.yaml
+```
 
-# Remove the container
-docker rm -f flask-app
+2. Verify the deployment:
 
-# View logs
-docker logs -f flask-app
+```bash
+# Check all resources in the namespace
+kubectl get all -n flask-app
+
+# Check specific resources
+kubectl get pods -n flask-app
+kubectl get svc -n flask-app
+kubectl get hpa -n flask-app
+```
+
+3. Monitor the application:
+
+```bash
+# View pod logs
+kubectl logs -f -l app=flask-counter -n flask-app
+
+# Describe the deployment
+kubectl describe deployment flask-counter -n flask-app
+
+# Check HPA status
+kubectl get hpa flask-counter -n flask-app
+```
+
+### Kubernetes Configuration
+
+The application is deployed with the following configuration:
+
+- **Namespace**: `flask-app`
+- **Replicas**: 3-5 (auto-scaled)
+- **Resources**:
+  - Requests: 100m CPU, 128Mi memory
+  - Limits: 500m CPU, 256Mi memory
+- **Health Checks**:
+  - Readiness probe: HTTP check on /
+  - Liveness probe: HTTP check on /
+- **Service**: ClusterIP on port 80
+- **Auto-scaling**: Based on 80% CPU utilization
+
+### Accessing the Application
+
+The service is exposed as ClusterIP by default. To access it:
+
+1. Using port-forward:
+```bash
+kubectl port-forward svc/flask-counter 8080:80 -n flask-app
+```
+Then visit `http://localhost:8080`
+
+2. Using cluster IP (within cluster):
+```bash
+kubectl get svc flask-counter -n flask-app
 ```
 
 ## Development
