@@ -9,7 +9,7 @@ def test_index_page(client):
     
     # Test that the page contains our main elements
     html_content = response.data.decode()
-    assert 'Dashboard' in html_content
+    assert 'Dadboard' in html_content
     assert 'Total Visits' in html_content
     assert 'Current UTC Time' in html_content
 
