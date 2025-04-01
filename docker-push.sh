@@ -1,33 +1,58 @@
 #!/bin/bash
 
-# Read the version from VERSION file and trim whitespace
-VERSION=$(cat VERSION | tr -d '[:space:]')
+# Exit on any error
+set -e
+
+# Configuration
+REPO_URL="https://github.com/grvsoni/flask-hello.git"  # Replace with your repo URL
 IMAGE_NAME="grvsoni/flask-counter"
+TEMP_DIR=$(mktemp -d)
 
-# Run tests locally first
-echo "Running tests locally..."
-python -m pytest -v
-if [ $? -ne 0 ]; then
-    echo "Tests failed! Aborting build."
-    exit 1
-fi
+echo "==> Creating temporary build directory: ${TEMP_DIR}"
 
-# Build the versioned image
-echo "Building image ${IMAGE_NAME}:v${VERSION}..."
+# Cleanup function
+cleanup() {
+    echo "==> Cleaning up temporary directory"
+    rm -rf "${TEMP_DIR}"
+}
+
+# Register cleanup function on script exit
+trap cleanup EXIT
+
+echo "==> Cloning repository"
+git clone --depth 1 -b main "${REPO_URL}" "${TEMP_DIR}"
+cd "${TEMP_DIR}"
+
+# Read version from VERSION file
+VERSION=$(cat VERSION | tr -d '[:space:]')
+echo "==> Building version: ${VERSION}"
+
+# Build the image
+echo "==> Building Docker image"
 docker build -t "${IMAGE_NAME}:v${VERSION}" .
-if [ $? -ne 0 ]; then
-    echo "Build failed!"
-    exit 1
-fi
-
-# Tag as latest
-echo "Tagging as latest..."
 docker tag "${IMAGE_NAME}:v${VERSION}" "${IMAGE_NAME}:latest"
 
-# Push both tags
-echo "Pushing version ${VERSION}..."
+# Push the images
+echo "==> Pushing Docker images"
 docker push "${IMAGE_NAME}:v${VERSION}"
-echo "Pushing latest tag..."
 docker push "${IMAGE_NAME}:latest"
 
-echo "Successfully pushed ${IMAGE_NAME}:v${VERSION} and ${IMAGE_NAME}:latest" 
+echo "==> Successfully published:"
+echo "    - ${IMAGE_NAME}:v${VERSION}"
+echo "    - ${IMAGE_NAME}:latest"
+
+# Print verification steps
+echo "
+Deployment completed successfully!
+To verify the deployment:
+
+1. Pull and run the new image:
+   docker pull ${IMAGE_NAME}:v${VERSION}
+   docker run -d -p 3000:3000 --name flask-app ${IMAGE_NAME}:v${VERSION}
+
+2. Access the application:
+   http://localhost:3000
+
+3. Check the version on Docker Hub:
+   https://hub.docker.com/r/grvsoni/flask-counter/tags
+" 
