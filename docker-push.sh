@@ -4,6 +4,8 @@
 VERSION=$(cat VERSION)
 IMAGE_NAME="grvsoni/flask-counter"
 
+docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+
 # Build the versioned image
 echo "Building image ${IMAGE_NAME}:v${VERSION}..."
 docker build -t "${IMAGE_NAME}:v${VERSION}" .
