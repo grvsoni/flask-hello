@@ -751,3 +751,35 @@ Now that the delegate is installed, you're ready to create CI/CD pipelines in Ha
    - Push the changes to the main branch
    - Verify that the pipeline automatically starts
    - Monitor the pipeline execution in the Harness UI
+
+## Creating a Pipeline Template
+
+1. Navigate to Pipeline Templates:
+   - In the Harness UI, go to Project Setup
+   - Click on "Templates" in the left sidebar
+   - Click "New Template"
+
+2. Configure Template Settings:
+   - Name: `flask-app-prod-stage-template`
+   - Version: `v1.0`
+   - Description: "Template for Flask application CI/CD pipeline"
+   - Type: Select "Stage"
+   - Click "Start"
+
+3. Create the stage as Deploy type
+  - Name : deploy-prod
+  - Use the same service as in the existing deploy stage in the pipeline. 
+  - Create a new environment and infra quite similar to the previous one but the namespace this time should be "flask-app-prod".
+  - Use the same rolling deploy strategy. 
+  - Save the template. 
+
+4. Go to the pipeline `flask-app`
+5. Click '+' to add a stage.
+6. Use template this time.
+![Use Template](images/use_template.png)
+7. Select the `flask-app-prod-stage-template` then click the 'Use Template' button at bottom.
+![Use Template as Deploy prod stage](images/deploy_prod_stage_using_template.png)
+8. Run the ppeline. The pipeline should now deploy the application in prod namespace 'flask-app-prod' after it had successfully deploy the application in pre-prod namespace 'flask-app'.
+![Prod updated in the final stage](images/deploy-prod-use-template.png)
+
+
