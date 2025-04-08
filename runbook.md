@@ -92,7 +92,32 @@ Kind (Kubernetes in Docker) offers several advantages over Minikube for local Ku
    kubectl config set-context --current --namespace=flask-app
    ```
 
-### Setting Up the Flask Application
+## Setting Up Docker Hub Account and Repository
+
+1. Create a Docker Hub Account and Log in to your new account
+
+2. Create a New Repository:
+   - After logging in, click "Create Repository" button
+   - Fill in the repository details:
+     - Name: `flask-counter`
+     - Visibility: Public (for free account)
+     - Description: "A Flask application that displays a counter and UTC time"
+   - Click "Create"
+
+3. Set Up Docker Credentials:
+   - Create a `.docker/config.json` file in your home directory:
+     ```bash
+     mkdir -p ~/.docker
+     touch ~/.docker/config.json
+     ```
+   - Log in to Docker Hub from your terminal:
+     ```bash
+     docker login
+     ```
+   - Enter your Docker Hub username and password when prompted
+
+
+## Setting Up the Flask Application
 
 1. Create a new directory and initialize the project:
    ```bash
@@ -414,44 +439,208 @@ Kind (Kubernetes in Docker) offers several advantages over Minikube for local Ku
      kubectl get svc flask-counter -n flask-app -o yaml
      ```
 
-## Setting Up Docker Hub
-
-1. Create a Docker Hub Account and Log in to your new account
-
-2. Create a New Repository:
-   - After logging in, click "Create Repository" button
-   - Fill in the repository details:
-     - Name: `flask-counter`
-     - Visibility: Public (for free account)
-     - Description: "A Flask application that displays a counter and UTC time"
-   - Click "Create"
-
-3. Set Up Docker Credentials:
-   - Create a `.docker/config.json` file in your home directory:
-     ```bash
-     mkdir -p ~/.docker
-     touch ~/.docker/config.json
-     ```
-   - Log in to Docker Hub from your terminal:
-     ```bash
-     docker login
-     ```
-   - Enter your Docker Hub username and password when prompted
-
 ## So far in this guide, we have successfully:
 
 1. Set up a local Kubernetes development environment using Kind, creating a 3-node cluster
-2. Created a Flask application with counter and UTC time display functionality
-3. Containerized the application using Docker with best practices
-4. Published the Docker image to Docker Hub
-5. Deployed the application to Kubernetes with:
-   - Proper resource limits
-   - Health checks
-   - Load balancing
-   - Multiple replicas for high availability
-6. Set up port forwarding to access the application locally
+2. Setting Up Docker Hub Account and Repository.
+3. Created a Flask application with counter and UTC time display functionality
+4. Containerized the application using Docker with best practices
+5. Published the Docker image to Docker Hub
+6. Deployed the application to Kubernetes.
+7. Set up port forwarding to access the application locally
 
 The setup provides a production-like environment for development and testing, with all the necessary components for a scalable web application. The application can be accessed locally through port forwarding, and the deployment is configured with proper resource management and health monitoring.
 
 This setup serves as a foundation that can be extended with CI/CD pipeline integration in Harness.io.
+ 
 
+---
+# CI/CD pipeline integration in Harness.io
+
+## Setting Up Harness Platform
+
+1. Sign up for Harness Free Trial at https://app.harness.io/auth/#/signup
+   
+2. Create a New Project:
+   - After logging in, click "Create a Project"
+   - Fill in the project details:
+     - Name: `flask-counter`
+     - Organization: (select or create new)
+     - Description: "Flask Counter Application CI/CD Pipeline"
+   - Click "Save"
+
+![New Project Creation](images/new_project.png)
+
+### Install Harness Delegate:
+   - In the Harness UI, navigate to Project Settings → Delegates
+   - Click "New Delegate"
+![New Delegate Creation](images/new_delegate.png)
+   - Select "Kubernetes" as the delegate type
+   - Choose "Helm Chart" as the installation method
+   - Copy the provided Helm command:
+     ```bash
+     helm repo add harness-delegate https://app.harness.io/storage/harness-download/delegate-helm-chart/
+     helm repo update harness-delegate
+     helm upgrade -i helm-delegate --namespace harness-delegate-ng --create-namespace \
+       harness-delegate/harness-delegate-ng \
+       --set delegateName=helm-delegate \
+       --set accountId=YOUR_ACCOUNT_ID \
+       --set delegateToken=YOUR_DELEGATE_TOKEN \
+       --set managerEndpoint=https://app.harness.io/gratis/api/ \
+       --set delegateDockerImage=harness/delegate:23.07.79904 \
+       --set replicas=1 --set upgrader.enabled=false
+     ```
+   - Replace `YOUR_ACCOUNT_ID` and `YOUR_DELEGATE_TOKEN` with values from the Harness UI
+   - Run the command in your terminal
+![New Delegate Instructions](images/new_delegate_instructions.png)
+
+### Verify Delegate Installation:
+   - At the bottom of the new delegate page, click 'Verify' button.
+     ![New Delegate verified](images/verify_delegate.png)
+   - Also, In the Harness UI, check the Delegates page
+   - The delegate should show as "Connected" within a few minutes
+     ![New Delegate connected](images/delegate_connected.png)
+   - Verify the delegate is running in your cluster:
+     ```bash
+     kubectl get pods -n harness-delegate-ng
+     ```
+     ![New Delegate pod](images/delegate_pod.png)
+
+### Delegate Troubleshooting:
+   - If the delegate doesn't connect:
+     ```bash
+     # Check delegate logs
+     kubectl logs -n harness-delegate-ng -l harness.io/name=helm-delegate
+     
+     # Verify delegate pod status
+     kubectl describe pod -n harness-delegate-ng -l harness.io/name=helm-delegate
+     ```
+
+Now that the delegate is installed, you're ready to create CI/CD pipelines in Harness for your Flask application.
+
+## Creating a CI Pipeline in Harness
+
+1. Navigate to CI Pipeline Creation:
+   - In the Harness UI, go to your project
+   - Click on "Pipelines" in the left sidebar
+   - Click "Create a Pipeline"
+   ![New Pipeline](images/create_pipeline.png)
+
+2. Add Test Stage:
+  - Click "+" to add Stage
+  - Select "Build" step type
+  - Configure the Test stage:
+    - Name : test
+    - Select Git provider as 3rd Party.
+     ![Pipeline Build Stage Settings](images/build_stage_settings.png)
+    - To connect to the 3rd party Git provoder, In this case github, you will now need to create a connector.
+      - Click connector dropdown. 
+      - Click on New connector button in the new popup.
+        ![New Connector Button](images/new_connector.png)
+      - Select Github as connector type.
+        ![Github Connector type](images/github_connector.png)
+      - In the next popup give a name to the connector and click "Continue".
+      - In the Details, provide:
+        - URL type: Repository
+        - Connection type: HTTP
+        - Github Repository URL: `https://github.com/grvsoni/flask-hello.git`
+        ![Github Connector details](images/git_connector_details.png)
+      - In the Connections, provide:
+        - Authentication Type: OAuth
+        - Click "Link to Github". This will take you to the guthub. Complete the lnk process.
+        - Once link is established, Click on the "Continue".
+        ![Github Connector Credentials](images/git_connector_creds.png)
+      - In the Connectivity Mode, choose and then click 'Save and Continue'.
+        ![Github Connector Connectivity Mode](images/git_connectivity_mode.png)
+      - Once the connection test succeeds on the next screen, click Finish button.
+        ![Github Connector Connectivity Succeeds](images/git_connection_succeeds.png)
+    - Set the Infrastructure to build and test it on Harness cloud.
+      - Choose Infrastructure as 'Cloud' and
+      - Platform as 'Linux' [AMD64].
+      ![Infra settings](images/Infra_settings.png)
+      - Click 'Continue'
+    - In the Execution step,
+      - Click on the '+' and
+      - Click 'Add Step'
+      ![Infra add step](images/infra_add_step.png)
+      - From the step, 
+        - Choose Build > Run
+        - Name: run_test
+        - Shell: Sh
+        - and add the code as below
+        ```
+            pip install -r requirements.txt
+            echo "Running tests locally..."
+            python -m pytest -v
+            if [ $? -ne 0 ]; then
+                echo "Tests failed! Aborting build."
+                exit 1
+            fi
+        ```
+
+3. Add Push Stage:
+  - Click the next "+" to add Stage
+  - Select "Build" step type
+  - Configure the Push stage:
+    - Name : push
+    - Since the git provider is already setup. You will go directly to infrastructure Step.
+    - Set the Infrastructure to build and test it on Harness cloud.
+      - Choose Infrastructure as 'Cloud' and
+      - Platform as 'Linux' [AMD64].
+      ![Infra settings](images/Infra_settings.png)
+      - Click 'Continue'
+    - In the Execution step,
+      - Click on the '+' and
+      - Click 'Add Step'
+      ![Infra add step](images/infra_add_step.png)
+      - From the step, 
+        - Choose Build > Run
+        - Name: run_push
+        - Shell: Sh
+        - and add the code as below
+        ```
+            pip install -r requirements.txt
+            ./docker-push.sh
+        ```
+  - Run the pipeline by clicking the Green Run button on the top right corner.
+    <br/><span style="color:red"><b>Challenge 1:</b></span> The push step failed.
+    ```
+    ...
+    denied: requested access to the resource is denied
+    ```
+    - The same command seems to work on my local but not on the harness cloud.
+    - I realised the my script `./docker-push.sh` is not loging into the dockerhub and missing the command below:
+      ```
+      docker login -u <username> -p <password>
+      ```
+    - I added the line in the `./docker-push.sh`, and it worked.
+    - But as a best practice I do not want to push the username and password as string into my code. I need a way to inject it in more safer way. So I changed my code to use environment variable.
+      ```
+      docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+      ```
+    - Now I need to set the environment varibale in the `run_push` sh script as below:
+      ```
+        pip install -r requirements.txt
+        export DOCKER_USERNAME=<username>
+        export DOCKER_PASSWORD=<password>
+        ./docker-push.sh
+      ```
+    - Again, I wanted a better way to inject those values into the environment variable. After exploring, I got to know that we can create stage level variables which can be inject in the scripts like this. 
+    - So, to Create a stage variable. 
+        - Click the Variable button on the right edge of the Screen.
+        
+        ![Variable button](images/variable_button.png)
+        - Click on the `+ add variable` link at the Stage Push level.
+        ![New Variable](images/add_variable.png)
+        - Create two variables
+          - Name : `username`, Value : `<git_username>`
+          - Name : `password`, Value : `<git_password>`
+    - Use the variable to inject username and password in environment variable.
+      ```
+        pip install -r requirements.txt
+        export DOCKER_USERNAME=<+stage.variables.username>
+        export DOCKER_PASSWORD=<+stage.variables.password>
+        ./docker-push.sh
+      ```
+    - Once this is done. The pipeline seems to work fine. 
+    
