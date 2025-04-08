@@ -380,27 +380,19 @@ Kind (Kubernetes in Docker) offers several advantages over Minikube for local Ku
    kubectl get svc -n flask-app
    ```
 
-### Accessing the Application
-
-1. Port forward the service to your local machine:
-   ```bash
-   # Port forward the service to localhost:3000
-   kubectl port-forward svc/flask-counter -n flask-app 3000:80
-   ```
-
-2. Access the application:
+5. Access the application:
+   - Port forward the service to your local machine:
+     ```bash
+     # Port forward the service to localhost:3000
+     kubectl port-forward svc/flask-counter -n flask-app 3000:80
+     ```
    - Open your web browser
    - Navigate to `http://localhost:3000`
    - You should see the Flask application with:
      - A counter that increments with each page refresh
      - The current UTC time
 
-3. To verify the application is working correctly:
-   - Refresh the page multiple times to see the counter increment
-   - Check that the UTC time updates correctly
-   - The page should load quickly and consistently
-
-4. To stop port forwarding:
+6. To stop port forwarding:
    - Press `Ctrl+C` in the terminal where port-forward is running
    - Or use the following command to find and kill the process:
      ```bash
@@ -654,96 +646,56 @@ Now that the delegate is installed, you're ready to create CI/CD pipelines in Ha
 ## Creating a CD Stage in Harness UI.
 
 1. Add CD Stage:
-   - In the pipeline editor, click "+" to add a new stage
-   - Select "Deploy" as the stage type
-   - Configure the stage:
-     - Name: `deploy`
-     - Environment: Create new
-       - Name: `flask-app-env`
-       - Type: `Production`
-       - Click "Save"
-     - Service: Create new
-       - Name: `flask-app-service`
-       - Deployment Type: `Kubernetes`
-       - Click "Save"
+  - In the pipeline editor, click "+" to add a new stage
+
+  - Select "Deploy" as the stage type
+    ![Deploy stage type](images/deploy_stage_type.png)
+
+  - Configure the stage:
+    - Name: `deploy`
+    - Deployment type: k8s
+    - Click 'Set Up Stage' button
+    ![Deployment type](images/deploy_type_k8s.png)
 
 2. Configure Service:
-   - In the service configuration:
+  - Service: Create new
+    - Name: `flask-app-service`
+    - Deployment Type: `Kubernetes`
+    ![Deployment service](images/deploy_service.png)
+    - In the service configuration:
      - Click "Add Manifest"
      - Select "Kubernetes" as the manifest type
      - Add the following manifests:
-       ```yaml
-       # deployment.yaml
-       apiVersion: apps/v1
-       kind: Deployment
-       metadata:
-         name: flask-counter
-         namespace: flask-app
-       spec:
-         replicas: 3
-         selector:
-           matchLabels:
-             app: flask-counter
-         template:
-           metadata:
-             labels:
-               app: flask-counter
-           spec:
-             containers:
-             - name: flask-counter
-               image: grvsoni/flask-counter:latest
-               ports:
-               - containerPort: 3000
-               resources:
-                 requests:
-                   cpu: "100m"
-                   memory: "128Mi"
-                 limits:
-                   cpu: "500m"
-                   memory: "256Mi"
-       ```
-       ```yaml
-       # service.yaml
-       apiVersion: v1
-       kind: Service
-       metadata:
-         name: flask-counter
-         namespace: flask-app
-       spec:
-         type: LoadBalancer
-         ports:
-         - port: 80
-           targetPort: 3000
-         selector:
-           app: flask-counter
-       ```
+       - k8s/deployment.yaml
+       - k8s/configmap.yaml
+       - k8s/service.yaml
+    - Click "Save"
+    ![Deployment service manifests](images/deploy_service_manifests.png)
+    - Click Continue
 
-3. Configure Infrastructure:
-   - Select "Kubernetes" as the infrastructure type
-   - Choose your delegate from the dropdown
-   - Select the namespace: `flask-app`
-   - Click "Continue"
-
+3. Configure Environment:
+  - Environment: Create new
+    - Name: `flask-app-env`
+    - Type: `Pre Production`
+    - Setup : `Inline`
+    - Click "Save"
+    ![Deploy environment](images/deploy_env.png)
+    - Click Continue
+  
 4. Configure Execution:
    - Click "Add Step"
    - Select "Rolling Deployment" strategy
+   ![Deploy execution strategy](images/deploy_execution.png)
    - Configure the step:
-     - Name: `rolling-deploy`
+     - Name: `Rollout Deployment`
      - Skip Dry Run: `false`
-     - Click "Apply Changes"
-
-5. Add Approval Step (Optional):
-   - Click "Add Step"
-   - Select "Approval" step type
-   - Configure:
-     - Name: `manual-approval`
-     - Approval Type: `Manual`
-     - Click "Apply Changes"
+     - Save
 
 6. Save and Run:
    - Click "Save" to save the pipeline
    - Click "Run" to execute the pipeline
    - Monitor the deployment progress in the Harness UI
+   ![Pipeline Run](/images/pipeline_run.png)
 
 7. Verify Deployment:
    - Check the deployment status:
@@ -757,10 +709,45 @@ Now that the delegate is installed, you're ready to create CI/CD pipelines in Ha
      ```
    - Open browser and navigate to `http://localhost:3000`
 
-8. CD Pipeline Best Practices:
-   - Add health checks in the deployment
-   - Configure rollback strategies
-   - Set up notifications for deployment status
-   - Add pre-deployment checks
-   - Configure deployment timeouts
-   - Set up deployment verification steps
+## Setting Up GitHub Trigger
+
+1. Navigate to Triggers:
+   - In the pipeline editor, click on "Triggers" tab
+   ![Trigger link](images/trigger_link.png)
+   - Click "New Trigger"
+   ![New Trigger](images/new_trigger.png)
+
+2. Configure Trigger:
+   - Type: Select "GitHub"
+   ![Trigger Type](images/trigger_github.png)
+   
+
+3. Configure GitHub Connection:
+   - Name: `git-push-triggerr`
+   - Repository: Select your GitHub repository (`grvsoni/flask-hello`)
+   - Branch: Enter `main`
+   - Actions: Select "Push"
+   ![Trigger Configuration](images/trigger_config.png)
+
+4. Configure Payload Conditions:
+   - Click "Add Condition"
+   - Select "Branch" condition
+   - Operator: `equals`
+   - Value: `main`
+   ![Trigger Conditions](images/trigger_conditions.png)
+
+5. Configure Pipeline Input:
+   - Click "Pipeline Input" tab
+   - Review and confirm the pipeline inputs
+   - Click "Continue"
+   ![Pipeline Input](images/trigger_input.png)
+
+6. Save Trigger:
+   - Click "Create Trigger"
+   - Verify the trigger is created successfully
+
+7. Test the Trigger:
+   - Make a small change to your code
+   - Push the changes to the main branch
+   - Verify that the pipeline automatically starts
+   - Monitor the pipeline execution in the Harness UI
