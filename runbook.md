@@ -525,6 +525,13 @@ Now that the delegate is installed, you're ready to create CI/CD pipelines in Ha
    - Click on "Pipelines" in the left sidebar
    - Click "Create a Pipeline"
    ![New Pipeline](images/create_pipeline.png)
+   - Set the details for the pipeline
+     - Name : flask-app
+     - Description : CI Pipeline for Flask Counter Application
+     - Pipeline type : Inline
+     - Click 'Start' Button.
+   ![Pipeline Settings](images/pipeline_settings.png)
+   
 
 2. Add Test Stage:
   - Click "+" to add Stage
@@ -644,3 +651,116 @@ Now that the delegate is installed, you're ready to create CI/CD pipelines in Ha
       ```
     - Once this is done. The pipeline seems to work fine. 
     
+## Creating a CD Stage in Harness UI.
+
+1. Add CD Stage:
+   - In the pipeline editor, click "+" to add a new stage
+   - Select "Deploy" as the stage type
+   - Configure the stage:
+     - Name: `deploy`
+     - Environment: Create new
+       - Name: `flask-app-env`
+       - Type: `Production`
+       - Click "Save"
+     - Service: Create new
+       - Name: `flask-app-service`
+       - Deployment Type: `Kubernetes`
+       - Click "Save"
+
+2. Configure Service:
+   - In the service configuration:
+     - Click "Add Manifest"
+     - Select "Kubernetes" as the manifest type
+     - Add the following manifests:
+       ```yaml
+       # deployment.yaml
+       apiVersion: apps/v1
+       kind: Deployment
+       metadata:
+         name: flask-counter
+         namespace: flask-app
+       spec:
+         replicas: 3
+         selector:
+           matchLabels:
+             app: flask-counter
+         template:
+           metadata:
+             labels:
+               app: flask-counter
+           spec:
+             containers:
+             - name: flask-counter
+               image: grvsoni/flask-counter:latest
+               ports:
+               - containerPort: 3000
+               resources:
+                 requests:
+                   cpu: "100m"
+                   memory: "128Mi"
+                 limits:
+                   cpu: "500m"
+                   memory: "256Mi"
+       ```
+       ```yaml
+       # service.yaml
+       apiVersion: v1
+       kind: Service
+       metadata:
+         name: flask-counter
+         namespace: flask-app
+       spec:
+         type: LoadBalancer
+         ports:
+         - port: 80
+           targetPort: 3000
+         selector:
+           app: flask-counter
+       ```
+
+3. Configure Infrastructure:
+   - Select "Kubernetes" as the infrastructure type
+   - Choose your delegate from the dropdown
+   - Select the namespace: `flask-app`
+   - Click "Continue"
+
+4. Configure Execution:
+   - Click "Add Step"
+   - Select "Rolling Deployment" strategy
+   - Configure the step:
+     - Name: `rolling-deploy`
+     - Skip Dry Run: `false`
+     - Click "Apply Changes"
+
+5. Add Approval Step (Optional):
+   - Click "Add Step"
+   - Select "Approval" step type
+   - Configure:
+     - Name: `manual-approval`
+     - Approval Type: `Manual`
+     - Click "Apply Changes"
+
+6. Save and Run:
+   - Click "Save" to save the pipeline
+   - Click "Run" to execute the pipeline
+   - Monitor the deployment progress in the Harness UI
+
+7. Verify Deployment:
+   - Check the deployment status:
+     ```bash
+     kubectl get pods -n flask-app
+     kubectl get svc -n flask-app
+     ```
+   - Access the application:
+     ```bash
+     kubectl port-forward svc/flask-counter -n flask-app 3000:80
+     ```
+   - Open browser and navigate to `http://localhost:3000`
+
+8. CD Pipeline Best Practices:
+   - Add health checks in the deployment
+   - Configure rollback strategies
+   - Set up notifications for deployment status
+   - Add pre-deployment checks
+   - Configure deployment timeouts
+   - Set up deployment verification steps
