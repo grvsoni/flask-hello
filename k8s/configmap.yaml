@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: flask-counter-config
-  # namespace: flask-app
+  namespace: <+pipeline.variables.namespace>
 data:
   FLASK_ENV: "production"
   FLASK_APP: "app.py" 

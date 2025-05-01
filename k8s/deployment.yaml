@@ -2,9 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: flask-counter
-  # namespace: flask-app
+  namespace: <+pipeline.variables.namespace>
   labels:
     app: flask-counter
+    env: <+pipeline.variables.env>
 spec:
   replicas: 3
   selector:
@@ -14,6 +15,7 @@ spec:
     metadata:
       labels:
         app: flask-counter
+        env: <+pipeline.variables.env>
     spec:
       containers:
       - name: flask-counter
