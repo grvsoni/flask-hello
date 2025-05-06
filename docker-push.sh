@@ -2,7 +2,7 @@
 
 # Read the version from VERSION file and trim whitespace
 VERSION=$(cat VERSION)
-IMAGE_NAME="grvsoni/flask-counter"
+IMAGE_NAME="grvsoniharness/flask-counter"
 
 docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
 
