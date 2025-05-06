@@ -140,7 +140,7 @@ Kind (Kubernetes in Docker) offers several advantages over Minikube for local Ku
     pytest==8.1.1
     pytest-flask==1.3.0 
    ```
-   A sample code is present here `git@github.com:grvsoni/flask-hello.git` [private repo].
+   A sample code is present here `git@github.com:grvsoni-harness/flask-hello.git` [private repo].
 
 4. Test build and test the application on local:
    
@@ -188,7 +188,7 @@ Kind (Kubernetes in Docker) offers several advantages over Minikube for local Ku
 
 4. Add the remote repository and push:
    ```bash
-   git remote add origin git@github.com:grvsoni/flask-hello.git
+   git remote add origin git@github.com:grvsoni-harness/flask-hello.git
    git branch -M main
    git push -u origin main
    ```
@@ -254,7 +254,7 @@ Kind (Kubernetes in Docker) offers several advantages over Minikube for local Ku
 
     # Read the version from VERSION file and trim whitespace
     VERSION=$(cat VERSION)
-    IMAGE_NAME="grvsoni/flask-counter"
+    IMAGE_NAME="grvsoniharness/flask-counter"
 
     docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
 
@@ -317,7 +317,7 @@ Kind (Kubernetes in Docker) offers several advantages over Minikube for local Ku
         spec:
         containers:
         - name: flask-counter
-            image: grvsoni/flask-counter:latest
+            image: grvsoniharness/flask-counter:latest
             ports:
             - containerPort: 3000
             name: http
@@ -542,7 +542,7 @@ Now that the delegate is installed, you're ready to create CI/CD pipelines in Ha
       - In the Details, provide:
         - URL type: Repository
         - Connection type: HTTP
-        - Github Repository URL: `https://github.com/grvsoni/flask-hello.git`
+        - Github Repository URL: `https://github.com/grvsoni-harness/flask-hello.git`
         ![Github Connector details](images/git_connector_details.png)
       - In the Connections, provide:
         - Authentication Type: OAuth
@@ -724,7 +724,7 @@ Now that the delegate is installed, you're ready to create CI/CD pipelines in Ha
 
 3. Configure GitHub Connection:
    - Name: `git-push-triggerr`
-   - Repository: Select your GitHub repository (`grvsoni/flask-hello`)
+   - Repository: Select your GitHub repository (`grvsoniharness/flask-hello`)
    - Branch: Enter `main`
    - Actions: Select "Push"
    ![Trigger Configuration](images/trigger_config.png)
