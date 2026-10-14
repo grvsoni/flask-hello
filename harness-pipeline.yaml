@@ -1,0 +1,59 @@
+pipeline:
+  name: Flask Hello Build and Test
+  identifier: flask_hello_build_and_test
+  orgIdentifier: Demo
+  projectIdentifier: harness
+  properties:
+    ci:
+      codebase:
+        connectorRef: grvsoni_flask_hello
+        repoName: flask-hello
+        build:
+          type: branch
+          spec:
+            branch: <+input>.default(main)
+  stages:
+    - stage:
+        name: Build and Test
+        identifier: build_and_test
+        type: CI
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+            key: 'v1-cci_pycache-{{ checksum "requirements.txt" }}'
+            paths:
+              - /harness/venv
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  name: Install Dependencies
+                  identifier: install_dependencies
+                  type: Run
+                  description: Translates circleci/python@2.1.1 install-packages (pkg-manager pip). Installs into a venv under /harness so the packages survive into the next step's fresh container; the orb's pip cache maps to stage Cache Intelligence on /harness/venv. The venv is created only when the cache restore did not provide one (restored cache files are root-owned, so python -m venv cannot overwrite them); the cache key is pinned to the requirements.txt checksum, so a restored venv always matches and pip install is a no-op verification.
+                  spec:
+                    image: cimg/python:3.12
+                    shell: Bash
+                    command: |
+                      set -eo pipefail
+                      if [ ! -x /harness/venv/bin/pip ]; then
+                        python -m venv /harness/venv
+                      fi
+                      /harness/venv/bin/pip install -r requirements.txt
+              - step:
+                  name: Run Tests
+                  identifier: run_tests
+                  type: Run
+                  description: Translates CircleCI run step "Run tests" (pytest), using the venv created by install_dependencies.
+                  spec:
+                    image: cimg/python:3.12
+                    shell: Bash
+                    command: |
+                      set -eo pipefail
+                      /harness/venv/bin/pytest
