@@ -149,7 +149,7 @@ jobs:
             set +e
             trivy image --input flask-counter.tar --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed --ignorefile .trivyignore > /tmp/trivy.log 2>&1 &
             trivy_pid=$!
-            snyk container test "docker-archive:flask-counter.tar" --severity-threshold=high > /tmp/snyk.log 2>&1 &
+            snyk container test "docker-archive:flask-counter.tar" --severity-threshold=high --policy-path=.snyk > /tmp/snyk.log 2>&1 &
             snyk_pid=$!
             wait $trivy_pid; trivy_rc=$?
             wait $snyk_pid; snyk_rc=$?

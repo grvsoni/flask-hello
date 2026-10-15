@@ -1,0 +1,39 @@
+# Snyk policy file for the grvsoniharness/flask-counter image.
+#
+# The vulnerabilities below exist in Debian bookworm packages shipped by the
+# base image, but Debian has NOT released a fix for them (Trivy with
+# --ignore-unfixed reports zero findings for the same image). Snyk has no
+# "ignore unfixed" option, so they are suppressed individually here instead of
+# disabling the whole gate. Each entry expires after 90 days so the finding is
+# re-reviewed: if Debian has published a fix by then, remove the ignore and
+# rebuild instead.
+version: v1.25.1
+ignore:
+  SNYK-DEBIAN12-ZLIB-19520487:
+    - '*':
+        reason: 'zlib out-of-bounds write; no fixed version available in Debian bookworm.'
+        expires: 2027-01-13T00:00:00.000Z
+  SNYK-DEBIAN12-ZLIB-6008963:
+    - '*':
+        reason: 'zlib CVE-2022-37434 integer overflow; Debian declared no-dsa (not exploitable in this build), no fix released for bookworm.'
+        expires: 2027-01-13T00:00:00.000Z
+  SNYK-DEBIAN12-UTILLINUX-19513270:
+    - '*':
+        reason: 'util-linux/libblkid1 error handling; no fixed version available in Debian bookworm.'
+        expires: 2027-01-13T00:00:00.000Z
+  SNYK-DEBIAN12-UTILLINUX-19513278:
+    - '*':
+        reason: 'util-linux/libblkid1 fd leak; no fixed version available in Debian bookworm.'
+        expires: 2027-01-13T00:00:00.000Z
+  SNYK-DEBIAN12-UTILLINUX-19513283:
+    - '*':
+        reason: 'util-linux/libblkid1 link following; no fixed version available in Debian bookworm.'
+        expires: 2027-01-13T00:00:00.000Z
+  SNYK-DEBIAN12-UTILLINUX-19513290:
+    - '*':
+        reason: 'util-linux/libblkid1 TOCTOU; no fixed version available in Debian bookworm.'
+        expires: 2027-01-13T00:00:00.000Z
+  SNYK-DEBIAN12-CYRUSSASL2-20652390:
+    - '*':
+        reason: 'cyrus-sasl2 heap overflow; no fixed version available in Debian bookworm.'
+        expires: 2027-01-13T00:00:00.000Z
