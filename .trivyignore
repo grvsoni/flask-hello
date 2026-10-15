@@ -1,0 +1,6 @@
+# Suppressed vulnerabilities for the grvsoniharness/flask-counter image.
+# These live in setuptools' vendored packages (setuptools/_vendor); no setuptools
+# release vendors the fixed versions yet, so they cannot be upgraded away.
+# Both are build-time packaging tools and are not invoked at runtime.
+CVE-2026-23949 # jaraco.context (vendored): path traversal via malicious tar archives
+CVE-2026-24049 # wheel (vendored): priv-esc / code exec via malicious wheel file

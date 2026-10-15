@@ -126,13 +126,45 @@ jobs:
       # See: https://circleci.com/docs/building-docker-images/
       - setup_remote_docker
       - run:
-          name: Build and push Docker image to Docker Hub
-          # Reuses docker-push.sh, which builds grvsoniharness/flask-counter:v<VERSION>
-          # and :latest, then pushes both. Requires DOCKER_USERNAME and DOCKER_PASSWORD
-          # to be set as project environment variables in CircleCI.
+          name: Build Docker image
+          # Build grvsoniharness/flask-counter:v<VERSION> and :latest.
+          command: ./docker-push.sh build
+      # Install the Snyk CLI and authenticate with SNYK_TOKEN (project env var).
+      - snyk/install
+      - run:
+          name: Image security scan (Trivy + Snyk, in parallel)
+          # Scan the freshly built image with BOTH Aqua Trivy and Snyk before it
+          # is pushed. Either tool finding HIGH/CRITICAL vulnerabilities fails
+          # the gate. The image tar is built once and shared by both scanners,
+          # which run concurrently.
           command: |
-            chmod +x docker-push.sh
-            ./docker-push.sh
+            # Install Trivy CLI.
+            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+            # Save the built image to a tar (reliable with remote Docker); both scanners read it.
+            trap 'rm -f flask-counter.tar' EXIT
+            IMAGE="grvsoniharness/flask-counter:v$(cat VERSION | tr -d '[:space:]')"
+            docker save -o flask-counter.tar "$IMAGE"
+            # Run both scans in parallel; capture each exit code (disable errexit so a
+            # failed scan doesn't abort before the other reports).
+            set +e
+            trivy image --input flask-counter.tar --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed --ignorefile .trivyignore > /tmp/trivy.log 2>&1 &
+            trivy_pid=$!
+            snyk container test "docker-archive:flask-counter.tar" --severity-threshold=high > /tmp/snyk.log 2>&1 &
+            snyk_pid=$!
+            wait $trivy_pid; trivy_rc=$?
+            wait $snyk_pid; snyk_rc=$?
+            echo "=== Trivy (exit $trivy_rc) ==="; cat /tmp/trivy.log
+            echo "=== Snyk (exit $snyk_rc) ==="; cat /tmp/snyk.log
+            if [ "$trivy_rc" -ne 0 ] || [ "$snyk_rc" -ne 0 ]; then
+              echo "Image security scan failed: Trivy=$trivy_rc Snyk=$snyk_rc"
+              exit 1
+            fi
+            echo "Both Trivy and Snyk scans passed."
+      - run:
+          name: Push Docker image to Docker Hub
+          # Only runs if the Trivy gate passed. Requires DOCKER_USERNAME and
+          # DOCKER_PASSWORD to be set as project environment variables.
+          command: ./docker-push.sh push
 
   # Deploy the latest published image to the local Kubernetes cluster.
   # This runs on a SELF-HOSTED CircleCI runner installed on the machine that has

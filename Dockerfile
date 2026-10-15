@@ -26,8 +26,11 @@ RUN useradd -m myuser
 COPY requirements.txt .
 
 # Install Python dependencies
+# Upgrade setuptools/wheel to pull in patched versions of their vendored
+# packages (fixes CVE-2026-23949 and CVE-2026-24049 flagged by Trivy).
 RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir pytest-cov coverage
+    && pip install --no-cache-dir pytest-cov coverage \
+    && pip install --no-cache-dir --upgrade setuptools wheel
 
 # Copy the application with proper permissions
 COPY --chown=myuser:myuser . .
