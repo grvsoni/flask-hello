@@ -152,12 +152,6 @@ jobs:
             # Force a new rollout so the latest image is pulled, then wait for it.
             kubectl rollout restart deployment/flask-counter -n flask-app
             kubectl rollout status deployment/flask-counter -n flask-app --timeout=120s
-  build:
-    docker:
-      - image: cimg/base:current
-    resource_class: grvsoniharness/flask-app
-    steps:
-      - run: echo "Hi I'm on a Container Runner!"
 
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/guides/orchestrate/workflows/ & https://circleci.com/docs/reference/configuration-reference/#workflows
@@ -174,6 +168,3 @@ workflows:
       - deploy-to-k8s:
           requires:
             - build-and-push-image
-  build-workflow:
-    jobs:
-      - build
