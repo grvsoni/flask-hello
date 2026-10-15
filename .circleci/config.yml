@@ -10,6 +10,9 @@ version: 2.1
 orbs:
   # See the Python orb documentation here: https://circleci.com/developer/orbs/orb/circleci/python
   python: circleci/python@2.1.1
+  # Snyk orb for scanning dependencies for known vulnerabilities.
+  # See: https://circleci.com/developer/orbs/orb/snyk/snyk
+  snyk: snyk/snyk@2.3.0
 
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#jobs-overview & https://circleci.com/docs/reference/configuration-reference/#jobs
@@ -38,6 +41,13 @@ jobs:
           command: |
             pip install bandit
             bandit -r . -x ./tests,./venv -ll
+      - snyk/scan:
+          # Scan dependencies for known vulnerabilities.
+          # Requires the SNYK_TOKEN env var (set it as a project/context variable).
+          # Fail the build only on high or critical severity issues.
+          severity-threshold: high
+          fail-on-issues: true
+          monitor-on-build: false
       - run:
           name: Run tests
           # This assumes pytest is installed via the install-package step above.
