@@ -138,7 +138,7 @@ jobs:
   deploy-to-k8s:
     machine: true
     # Replace with your runner's resource class, in the form <namespace>/<resource-class>.
-    resource_class: grvsoniharness/flask-counter
+    resource_class: grvsoniharness/flask-app
     steps:
       - checkout
       - run:
