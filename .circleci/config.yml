@@ -113,6 +113,24 @@ jobs:
           path: test-results
           destination: test-results
 
+  # Build the Docker image and push it to Docker Hub.
+  build-and-push-image:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      # A remote Docker environment is required to build images from a Docker executor.
+      # See: https://circleci.com/docs/building-docker-images/
+      - setup_remote_docker
+      - run:
+          name: Build and push Docker image to Docker Hub
+          # Reuses docker-push.sh, which builds grvsoniharness/flask-counter:v<VERSION>
+          # and :latest, then pushes both. Requires DOCKER_USERNAME and DOCKER_PASSWORD
+          # to be set as project environment variables in CircleCI.
+          command: |
+            chmod +x docker-push.sh
+            ./docker-push.sh
+
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/guides/orchestrate/workflows/ & https://circleci.com/docs/reference/configuration-reference/#workflows
 workflows:
@@ -120,3 +138,7 @@ workflows:
     # Inside the workflow, you define the jobs you want to run.
     jobs:
       - build-and-test
+      # Only build and push the image after tests pass.
+      - build-and-push-image:
+          requires:
+            - build-and-test
