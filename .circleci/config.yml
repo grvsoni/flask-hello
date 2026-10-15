@@ -154,7 +154,7 @@ jobs:
   build:
     docker:
       - image: cimg/base:current
-    resource_class: grvsoniharness/flask-counter
+    resource_class: grvsoniharness/flask-app
     steps:
       - run: echo "Hi I'm on a Container Runner!"
 

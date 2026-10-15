@@ -1,0 +1,5 @@
+agent:
+  # runnerAPI: https://app.circleci.com
+  resourceClasses:
+    grvsoniharness/flask-app:
+      token: 71f86b5c6c6cfab1f40aa5c88030a60e0f6cc66b525271876ff80af705807030396c3232d9910425
