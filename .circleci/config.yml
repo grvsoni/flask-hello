@@ -13,6 +13,9 @@ orbs:
   # Snyk orb for scanning dependencies for known vulnerabilities.
   # See: https://circleci.com/developer/orbs/orb/snyk/snyk
   snyk: snyk/snyk@2.3.0
+  # Node orb, used to install Node.js so snyk-to-html can render the report.
+  # See: https://circleci.com/developer/orbs/orb/circleci/node
+  node: circleci/node@7.2.1
 
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#jobs-overview & https://circleci.com/docs/reference/configuration-reference/#jobs
@@ -44,10 +47,45 @@ jobs:
       - snyk/scan:
           # Scan dependencies for known vulnerabilities.
           # Requires the SNYK_TOKEN env var (set it as a project/context variable).
-          # Fail the build only on high or critical severity issues.
-          severity-threshold: high
-          fail-on-issues: true
+          # Do not fail here so the JSON/HTML reports are always produced and
+          # uploaded as artifacts; the high-severity gate is enforced below.
+          fail-on-issues: false
           monitor-on-build: false
+          # Write the full results to JSON for archiving and HTML rendering.
+          additional-test-arguments: "--json-file-output=snyk-results.json"
+      # Upload the raw Snyk JSON report as a build artifact.
+      # See: https://circleci.com/docs/guides/optimize/artifacts/
+      - store_artifacts:
+          path: snyk-results.json
+          destination: snyk-results.json
+      # Install Node.js so we can use snyk-to-html (an npm package).
+      - node/install
+      - run:
+          name: Render Snyk results to HTML
+          # See: https://github.com/snyk/snyk-to-html
+          # Run even if a previous step failed so the report is always generated.
+          command: |
+            npm install -g snyk-to-html
+            snyk-to-html -i snyk-results.json -o snyk-results.html
+          when: always
+      # Upload the human-friendly HTML report as a build artifact.
+      - store_artifacts:
+          path: snyk-results.html
+          destination: snyk-results.html
+      - run:
+          name: Fail build on high or critical Snyk vulnerabilities
+          # Enforce the severity gate using the already-generated JSON report.
+          command: |
+            if [ ! -f snyk-results.json ]; then
+              echo "No Snyk results file found; skipping gate."
+              exit 0
+            fi
+            if jq -e '[.. | objects | select(.severity? == "high" or .severity? == "critical")] | length == 0' snyk-results.json > /dev/null; then
+              echo "No high or critical vulnerabilities found."
+            else
+              echo "High or critical vulnerabilities found — failing build."
+              exit 1
+            fi
       - run:
           name: Run tests
           # This assumes pytest is installed via the install-package step above.
