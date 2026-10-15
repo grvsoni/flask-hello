@@ -16,6 +16,9 @@ orbs:
   # Node orb, used to install Node.js so snyk-to-html can render the report.
   # See: https://circleci.com/developer/orbs/orb/circleci/node
   node: circleci/node@7.2.1
+  # Kubernetes orb, used to install kubectl in the deploy job.
+  # See: https://circleci.com/developer/orbs/orb/circleci/kubernetes
+  kubernetes: circleci/kubernetes@2.0.2
 
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#jobs-overview & https://circleci.com/docs/reference/configuration-reference/#jobs
@@ -138,17 +141,23 @@ jobs:
   deploy-to-k8s:
     docker:
       - image: cimg/base:current
-    # Replace with your runner's resource class, in the form <namespace>/<resource-class>.
+    # Runs on the container runner. Replace with your runner's resource class.
     resource_class: grvsoniharness/flask-app
     steps:
       - checkout
+      # cimg/base has no kubectl; install it via the orb.
+      - kubernetes/install_kubectl
       - run:
           name: Deploy latest image to local Kubernetes cluster
+          # The task pod runs inside the cluster, so kubectl automatically uses the
+          # pod's in-cluster service account (flask-deployer, configured in the
+          # container-agent values.yaml). That SA must have RBAC to deploy into
+          # flask-app (see k8s/rbac/circleci-deployer-rbac.yaml).
           command: |
-            # Ensure the target namespace exists.
-            kubectl get namespace flask-app >/dev/null 2>&1 || kubectl create namespace flask-app
-            # Apply the manifests (each manifest already sets namespace: flask-app).
-            kubectl apply -f k8s/
+            # Apply the application manifests (each already sets namespace: flask-app).
+            kubectl apply -f k8s/configmap.yaml
+            kubectl apply -f k8s/deployment.yaml
+            kubectl apply -f k8s/service.yaml
             # Force a new rollout so the latest image is pulled, then wait for it.
             kubectl rollout restart deployment/flask-counter -n flask-app
             kubectl rollout status deployment/flask-counter -n flask-app --timeout=120s
