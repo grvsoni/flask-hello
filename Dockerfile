@@ -1,5 +1,7 @@
-# Use Python 3.11 slim image as base
-FROM python:3.11-slim
+# Use Python 3.11 slim image pinned to the stable Debian (bookworm) track.
+# The unpinned python:3.11-slim tag tracks Debian testing (trixie), which
+# carries many vulnerabilities with no fix available; Snyk gating fails there.
+FROM python:3.11-slim-bookworm
 
 # Set working directory
 WORKDIR /app
@@ -12,8 +14,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies and cleanup in one layer
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Upgrade existing system packages for the latest security fixes,
+# install build dependencies, and cleanup in one layer
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     && rm -rf /var/lib/apt/lists/* \

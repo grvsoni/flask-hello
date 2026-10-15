@@ -1,0 +1,19 @@
+# Local virtual environment (must never be baked into the image)
+venv/
+
+# Git metadata
+.git/
+
+# CI / build config
+.circleci/
+harness-pipeline.yaml
+
+# Kubernetes manifests (not needed inside the image)
+k8s/
+
+# Local/CI artifacts and caches
+test-results/
+__pycache__/
+*.pyc
+.pytest_cache/
+runbook.md
