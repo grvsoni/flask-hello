@@ -40,8 +40,11 @@ jobs:
             bandit -r . -x ./tests,./venv -ll
       - run:
           name: Run tests
-          # This assumes pytest is installed via the install-package step above
-          command: pytest
+          # This assumes pytest is installed via the install-package step above.
+          # Emit a JUnit XML report so CircleCI can display test results.
+          command: pytest --junitxml=test-results/junit.xml
+      - store_test_results:
+          path: test-results
 
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/guides/orchestrate/workflows/ & https://circleci.com/docs/reference/configuration-reference/#workflows
