@@ -131,6 +131,27 @@ jobs:
             chmod +x docker-push.sh
             ./docker-push.sh
 
+  # Deploy the latest published image to the local Kubernetes cluster.
+  # This runs on a SELF-HOSTED CircleCI runner installed on the machine that has
+  # kubectl access to the local cluster (CircleCI cloud executors cannot reach a
+  # local/localhost cluster). See: https://circleci.com/docs/runner-overview/
+  deploy-to-k8s:
+    machine: true
+    # Replace with your runner's resource class, in the form <namespace>/<resource-class>.
+    resource_class: grvsoniharness/local-k8s
+    steps:
+      - checkout
+      - run:
+          name: Deploy latest image to local Kubernetes cluster
+          command: |
+            # Ensure the target namespace exists.
+            kubectl get namespace flask-app >/dev/null 2>&1 || kubectl create namespace flask-app
+            # Apply the manifests (each manifest already sets namespace: flask-app).
+            kubectl apply -f k8s/
+            # Force a new rollout so the latest image is pulled, then wait for it.
+            kubectl rollout restart deployment/flask-counter -n flask-app
+            kubectl rollout status deployment/flask-counter -n flask-app --timeout=120s
+
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/guides/orchestrate/workflows/ & https://circleci.com/docs/reference/configuration-reference/#workflows
 workflows:
@@ -142,3 +163,7 @@ workflows:
       - build-and-push-image:
           requires:
             - build-and-test
+      # Deploy to the local k8s cluster after the image is published.
+      - deploy-to-k8s:
+          requires:
+            - build-and-push-image
