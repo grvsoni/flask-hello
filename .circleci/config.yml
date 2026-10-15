@@ -136,7 +136,8 @@ jobs:
   # kubectl access to the local cluster (CircleCI cloud executors cannot reach a
   # local/localhost cluster). See: https://circleci.com/docs/runner-overview/
   deploy-to-k8s:
-    machine: true
+    docker:
+      - image: cimg/base:current
     # Replace with your runner's resource class, in the form <namespace>/<resource-class>.
     resource_class: grvsoniharness/flask-app
     steps:
