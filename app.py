@@ -1,5 +1,6 @@
 from flask import Flask, render_template
 from datetime import datetime
+import os
 import pytz
 
 app = Flask(__name__)
@@ -18,4 +19,5 @@ def index():
     return render_template('index.html', counter=visit_counter, utc_time=utc_time)
 
 if __name__ == '__main__':
-    app.run(debug=True) 
+    debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    app.run(debug=debug_mode)
