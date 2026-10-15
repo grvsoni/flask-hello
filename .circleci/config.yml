@@ -32,6 +32,13 @@ jobs:
           # app-dir: ~/project/package-directory/  # If your requirements.txt isn't in the root directory.
           # pip-dependency-file: test-requirements.txt  # if you have a different name for your requirements file, maybe one that combines your runtime and test requirements.
       - run:
+          name: Run Bandit security scan
+          # Bandit is a static analysis tool for finding common security issues in Python code.
+          # -ll fails the build only on medium or higher severity findings.
+          command: |
+            pip install bandit
+            bandit -r . -x ./tests,./venv -ll
+      - run:
           name: Run tests
           # This assumes pytest is installed via the install-package step above
           command: pytest
@@ -39,7 +46,7 @@ jobs:
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/guides/orchestrate/workflows/ & https://circleci.com/docs/reference/configuration-reference/#workflows
 workflows:
-  sample: # This is the name of the workflow, feel free to change it to better match your workflow.
+  flask-hello-job: # This is the name of the workflow, feel free to change it to better match your workflow.
     # Inside the workflow, you define the jobs you want to run.
     jobs:
       - build-and-test
