@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: flask-counter
-  # namespace: flask-app
+  namespace: flask-app
   labels:
     app: flask-counter
 spec:
