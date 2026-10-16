@@ -1,0 +1,39 @@
+# Webhook push trigger for flask_hello_ci_cd_v2. CircleCI ran the workflow on
+# every branch push (no filters in the config), so this trigger fires on any
+# push with no branch conditions. Kept DISABLED for validation; enable it once
+# branch `main` carries the migrated config (the trigger pins its runs to the
+# pushed branch via the source_branch variable and the codebase build input).
+trigger:
+  name: Push any branch v2
+  identifier: flask_hello_push_v2
+  enabled: false
+  orgIdentifier: Demo
+  projectIdentifier: harness
+  pipelineIdentifier: flask_hello_ci_cd_v2
+  source:
+    type: Webhook
+    spec:
+      type: Github
+      spec:
+        type: Push
+        spec:
+          connectorRef: grvsoni_flask_hello
+          autoAbortPreviousExecutions: false
+          repoName: flask-hello
+          actions: []
+          payloadConditions: []
+          headerConditions: []
+  inputYaml: |
+    pipeline:
+      identifier: flask_hello_ci_cd_v2
+      variables:
+        - name: source_branch
+          type: String
+          value: <+trigger.branch>
+      properties:
+        ci:
+          codebase:
+            build:
+              type: branch
+              spec:
+                branch: <+trigger.branch>

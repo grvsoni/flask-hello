@@ -17,3 +17,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 runbook.md
+
+# Harness CI stage outputs (merged CI stage shares the workspace with the build)
+*.tar
+snyk-results.*

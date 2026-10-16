@@ -1,0 +1,53 @@
+# Harness Service for the deploy stage, migrated from the CircleCI deploy-to-k8s job.
+# Manifests come from this repository's k8s/ directory through the project Git
+# connector; the primary artifact is the Docker Hub image built and pushed by
+# the Build Scan Push Image CI stage.
+#
+# paths lists EXACTLY the three files the CircleCI deploy job applied
+# (kubectl apply -f k8s/configmap.yaml / k8s/deployment.yaml / k8s/service.yaml).
+# A `paths: [k8s]` folder is fetched recursively by Harness and would ALSO apply
+# k8s/namespace.yaml and k8s/rbac/circleci-deployer-rbac.yaml -- creating a
+# ServiceAccount and RoleBinding in the `circleci` namespace the deploy never
+# asked for. The flask-app namespace already exists (created once out of band).
+service:
+  name: Flask Counter v2
+  identifier: flask_counter_v2
+  orgIdentifier: Demo
+  projectIdentifier: harness
+  serviceDefinition:
+    type: Kubernetes
+    spec:
+      manifests:
+        - manifest:
+            identifier: flask_counter_manifests
+            type: K8sManifest
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: grvsoni_flask_hello
+                  repoName: flask-hello
+                  gitFetchType: Branch
+                  # Track the branch the pipeline was run against so the
+                  # manifests deployed are the ones from the built commit.
+                  branch: <+pipeline.variables.source_branch>
+                  paths:
+                    - k8s/configmap.yaml
+                    - k8s/deployment.yaml
+                    - k8s/service.yaml
+              # The ConfigMap name must stay stable (flask-counter-config) so
+              # the Deployment's configMapKeyRef keeps resolving; versioning it
+              # would rename it on every release.
+              skipResourceVersioning: true
+      artifacts:
+        primary:
+          primaryArtifactRef: flask_counter_image
+          sources:
+            - identifier: flask_counter_image
+              name: flask-counter-image
+              type: DockerRegistry
+              spec:
+                connectorRef: account.dockerharness
+                imagePath: grvsoniharness/flask-counter
+                tag: <+input>.default(latest)
+      variables: []
