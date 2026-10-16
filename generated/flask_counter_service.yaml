@@ -1,0 +1,39 @@
+# Harness Service for the deploy stage. Manifests come from this repository's
+# k8s/ directory through the project Git connector; the primary artifact is the
+# Docker Hub image built by the Build Scan Push Image stage.
+service:
+  name: Flask Counter
+  identifier: flask_counter
+  orgIdentifier: Demo
+  projectIdentifier: harness
+  serviceDefinition:
+    type: Kubernetes
+    spec:
+      manifests:
+        - manifest:
+            identifier: flask_counter_manifests
+            type: K8sManifest
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: grvsoni_flask_hello
+                  repoName: flask-hello
+                  branch: main
+                  paths:
+                    - k8s
+              # The ConfigMap name must stay stable (flask-counter-config) so
+              # the Deployment's configMapKeyRef keeps resolving; versioning it
+              # would rename it on every release.
+              skipResourceVersioning: true
+      artifacts:
+        primary:
+          primaryArtifactRef: flask_counter_image
+          sources:
+            - identifier: flask_counter_image
+              type: DockerRegistry
+              name: flask-counter-image
+              spec:
+                connectorRef: account.dockerharness
+                imagePath: grvsoniharness/flask-counter
+                tag: <+input>.default(latest)

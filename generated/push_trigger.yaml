@@ -1,0 +1,40 @@
+# Webhook push trigger: CircleCI builds every branch push by project default
+# (no filters in the config), so this trigger fires on any push with no branch
+# conditions. ENABLED — both runtime inputs are pre-filled in inputYaml below.
+trigger:
+  name: Push any branch
+  identifier: push_any_branch
+  enabled: true
+  orgIdentifier: Demo
+  projectIdentifier: harness
+  pipelineIdentifier: flask_hello_ci_cd
+  source:
+    type: Webhook
+    spec:
+      type: Github
+      spec:
+        type: Push
+        spec:
+          connectorRef: grvsoni_flask_hello
+          autoAbortPreviousExecutions: false
+          repoName: flask-hello
+          actions: []
+          payloadConditions: []
+          headerConditions: []
+  inputYaml: |
+    pipeline:
+      identifier: flask_hello_ci_cd
+      variables:
+        - name: snyk_api_token
+          type: String
+          value: <+secrets.getValue("account.snyk_api_token")>
+        - name: har_generic_registry
+          type: String
+          value: ci-artifacts
+      properties:
+        ci:
+          codebase:
+            build:
+              type: branch
+              spec:
+                branch: <+trigger.branch>

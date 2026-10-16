@@ -1,0 +1,26 @@
+# Environment + infrastructure definition for the local Kubernetes cluster.
+# account.k8s_rancher is the existing K8sCluster connector that reaches the
+# Rancher Desktop k3s cluster through the in-cluster delegate (helm-delegate) --
+# the exact analogue of the CircleCI self-hosted container runner.
+environment:
+  name: Local K8s
+  identifier: local_k8s
+  orgIdentifier: Demo
+  projectIdentifier: harness
+  type: PreProduction
+---
+infrastructureDefinition:
+  name: flask-app namespace on local k3s
+  identifier: flask_app_namespace
+  orgIdentifier: Demo
+  projectIdentifier: harness
+  environmentRef: local_k8s
+  deploymentType: Kubernetes
+  type: KubernetesDirect
+  spec:
+    connectorRef: account.k8s_rancher
+    namespace: flask-app
+    # Fixed release name so every run reuses the same release history and the
+    # rolling rollback step can restore the previous state (CircleCI's kubectl
+    # apply had no release concept; Harness needs one).
+    releaseName: flask-counter

@@ -1,0 +1,346 @@
+pipeline:
+  name: Flask Hello CI CD
+  identifier: flask_hello_ci_cd
+  orgIdentifier: Demo
+  projectIdentifier: harness
+  properties:
+    ci:
+      codebase:
+        connectorRef: grvsoni_flask_hello
+        repoName: flask-hello
+        build:
+          type: branch
+          spec:
+            branch: <+input>.default(main)
+  variables:
+    - name: image_repo
+      type: String
+      value: grvsoniharness/flask-counter
+    - name: snyk_api_token
+      type: String
+      value: <+input>
+    - name: har_generic_registry
+      type: String
+      value: <+input>
+  stages:
+    - stage:
+        name: Build and Test
+        identifier: build_and_test
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          caching:
+            enabled: true
+            key: v1-pip-{{ checksum "requirements.txt" }}
+            paths:
+              - /harness/venv
+          execution:
+            steps:
+              - step:
+                  identifier: install_dependencies
+                  name: Install Python dependencies
+                  type: Run
+                  description: "Translates python/install-packages (circleci/python@2.1.1, pkg-manager: pip). Installs into a venv under /harness so the packages survive into later steps' fresh containers; created only when the cache restore did not already provide one."
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: cimg/python:3.12
+                    shell: Bash
+                    command: |
+                      set -eo pipefail
+                      if [ ! -x /harness/venv/bin/pip ]; then
+                        python -m venv /harness/venv
+                      fi
+                      /harness/venv/bin/pip install -r requirements.txt
+              - step:
+                  identifier: bandit_scan
+                  name: Bandit security scan
+                  type: Bandit
+                  description: Translates the "Run Bandit security scan" run step (bandit -r . -x ./tests,./venv -ll). Native scanner step; severity medium maps to CircleCI's -ll threshold.
+                  spec:
+                    mode: orchestration
+                    config: default
+                    target:
+                      type: repository
+                      detection: manual
+                      name: <+codebase.repoName>
+                      variant: <+codebase.branch>
+                      workspace: /harness
+                    advanced:
+                      fail_on_severity: medium
+              - step:
+                  identifier: snyk_dependency_scan
+                  name: Snyk dependency scan
+                  type: Snyk
+                  description: "Translates snyk/scan (snyk/snyk@2.3.0) over the repository (requirements.txt). The CircleCI \"fail build on high or critical\" jq gate becomes fail_on_severity: high."
+                  spec:
+                    mode: orchestration
+                    config: oss
+                    target:
+                      type: repository
+                      detection: manual
+                      name: flask-hello-cli-deps
+                      variant: <+codebase.branch>
+                      workspace: /harness
+                    auth:
+                      type: apiKey
+                      access_token: <+pipeline.variables.snyk_api_token>
+                    advanced:
+                      fail_on_severity: high
+              - step:
+                  identifier: generate_snyk_reports
+                  name: Generate Snyk JSON and HTML reports
+                  type: Run
+                  description: "Reproduces the CircleCI snyk JSON output + snyk-to-html rendering (when: always) so the artifact uploads below have their files. Not a gate; the Snyk step above owns gating."
+                  when:
+                    stageStatus: All
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: node:22
+                    shell: Bash
+                    envVariables:
+                      SNYK_TOKEN: <+pipeline.variables.snyk_api_token>
+                    command: |
+                      set -eo pipefail
+                      npm install -g snyk snyk-to-html
+                      set +e
+                      snyk test --json-file-output=snyk-results.json
+                      snyk-to-html -i snyk-results.json -o snyk-results.html
+                      exit 0
+              - step:
+                  identifier: upload_snyk_json_report
+                  name: Upload Snyk JSON report
+                  type: HarUpload
+                  when:
+                    stageStatus: All
+                  spec:
+                    registryRef: <+pipeline.variables.har_generic_registry>
+                    packageType: GENERIC
+                    packageName: snyk-reports
+                    packageVersion: build-<+pipeline.sequenceId>
+                    sourcePath: snyk-results.json
+                    target: snyk-results.json
+              - step:
+                  identifier: upload_snyk_html_report
+                  name: Upload Snyk HTML report
+                  type: HarUpload
+                  when:
+                    stageStatus: All
+                  spec:
+                    registryRef: <+pipeline.variables.har_generic_registry>
+                    packageType: GENERIC
+                    packageName: snyk-reports
+                    packageVersion: build-<+pipeline.sequenceId>
+                    sourcePath: snyk-results.html
+                    target: snyk-results.html
+              - step:
+                  identifier: run_tests
+                  name: Run tests
+                  type: Test
+                  description: "Translates pytest + store_test_results. Step-level parallelism: 2 replaces CircleCI parallelism + timing-based `circleci tests split`; each shard writes a unique JUnit path."
+                  strategy:
+                    parallelism: 2
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: cimg/python:3.12
+                    shell: Bash
+                    command: |
+                      set -eo pipefail
+                      mkdir -p test-results/<+strategy.iteration>
+                      source /harness/venv/bin/activate
+                      pytest --junitxml=test-results/<+strategy.iteration>/junit.xml
+                    reports:
+                      type: JUnit
+                      spec:
+                        paths:
+                          - test-results/<+strategy.iteration>/junit.xml
+              - step:
+                  identifier: package_test_results
+                  name: Package test results
+                  type: Run
+                  description: Packs the per-shard JUnit XML into one archive so it can be stored as a single GENERIC package file (HarUpload uploads one file per step).
+                  when:
+                    stageStatus: All
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: cimg/python:3.12
+                    shell: Bash
+                    command: |
+                      set -eo pipefail
+                      tar -czf test-results.tgz test-results
+              - step:
+                  identifier: upload_test_results
+                  name: Upload JUnit XML archive
+                  type: HarUpload
+                  when:
+                    stageStatus: All
+                  spec:
+                    registryRef: <+pipeline.variables.har_generic_registry>
+                    packageType: GENERIC
+                    packageName: test-results
+                    packageVersion: build-<+pipeline.sequenceId>
+                    sourcePath: test-results.tgz
+                    target: test-results.tgz
+    - stage:
+        name: Build Scan Push Image
+        identifier: build_scan_push_image
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  identifier: get_image_tag
+                  name: Read image version
+                  type: Run
+                  description: Reads the VERSION file exactly as docker-push.sh does and exports it. Native build steps cannot read a file, so the tag is produced as an output variable consumed by the build and push steps.
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: cimg/python:3.12
+                    shell: Bash
+                    command: |
+                      set -eo pipefail
+                      export image_version=$(cat VERSION | tr -d '[:space:]')
+                      echo "image_version=$image_version"
+                    outputVariables:
+                      - name: image_version
+                        type: String
+                        value: image_version
+              - step:
+                  identifier: build_image_tar
+                  name: Build image
+                  type: BuildAndPushDockerRegistry
+                  description: "Translates \"./docker-push.sh build\" (docker build with both tags). PLUGIN_NO_PUSH + PLUGIN_TAR_PATH keeps the payload as a workspace tar so the scans below run before anything is published; caching: false picks the Kaniko engine that supports tar export."
+                  spec:
+                    connectorRef: account.dockerharness
+                    repo: <+pipeline.variables.image_repo>
+                    context: .
+                    dockerfile: Dockerfile
+                    tags:
+                      - v<+execution.steps.get_image_tag.output.outputVariables.image_version>
+                      - latest
+                    caching: false
+                    envVariables:
+                      PLUGIN_NO_PUSH: "true"
+                      PLUGIN_TAR_PATH: /harness/flask-counter.tar
+              - parallel:
+                  - step:
+                      identifier: trivy_image_scan
+                      name: Trivy image scan
+                      type: AquaTrivy
+                      description: "Translates the parallel Trivy gate (trivy image --input tar --severity HIGH,CRITICAL). NOTE: the repo .trivyignore entries (vendored setuptools CVEs) cannot carry over; recreate them as Harness STO exemptions if the scan flags those two findings."
+                      spec:
+                        mode: orchestration
+                        config: default
+                        target:
+                          type: container
+                          detection: manual
+                          name: <+pipeline.variables.image_repo>
+                          variant: <+codebase.branch>
+                          workspace: /harness/flask-counter.tar
+                        image:
+                          type: local_archive
+                          name: <+pipeline.variables.image_repo>
+                          tag: v<+execution.steps.get_image_tag.output.outputVariables.image_version>
+                          image_path: /harness/flask-counter.tar
+                        advanced:
+                          fail_on_severity: high
+                  - step:
+                      identifier: snyk_image_scan
+                      name: Snyk container scan
+                      type: Snyk
+                      description: "Translates the parallel `snyk container test docker-archive:... --severity-threshold=high` gate. NOTE: the repo .snyk policy file (7 expiring Debian ignores, --policy-path) cannot carry over; recreate them as Harness STO exemptions if the scan flags them."
+                      spec:
+                        mode: orchestration
+                        config: container
+                        target:
+                          type: container
+                          detection: manual
+                          name: <+pipeline.variables.image_repo>
+                          variant: <+codebase.branch>
+                          workspace: /harness/flask-counter.tar
+                        image:
+                          type: local_archive
+                          name: <+pipeline.variables.image_repo>
+                          tag: v<+execution.steps.get_image_tag.output.outputVariables.image_version>
+                          image_path: /harness/flask-counter.tar
+                        auth:
+                          type: apiKey
+                          access_token: <+pipeline.variables.snyk_api_token>
+                        advanced:
+                          fail_on_severity: high
+              - step:
+                  identifier: push_image
+                  name: Push image to Docker Hub
+                  type: BuildAndPushDockerRegistry
+                  description: Translates "./docker-push.sh push" (docker login + push of both tags; replaces DOCKER_USERNAME/DOCKER_PASSWORD with the registry connector). Skipped unless both scans pass, which preserves the scan-then-publish gate of the CircleCI job.
+                  when:
+                    stageStatus: Success
+                  spec:
+                    connectorRef: account.dockerharness
+                    repo: <+pipeline.variables.image_repo>
+                    tags:
+                      - v<+execution.steps.get_image_tag.output.outputVariables.image_version>
+                      - latest
+                    caching: false
+                    envVariables:
+                      PLUGIN_PUSH_ONLY: "true"
+                      PLUGIN_SOURCE_TAR_PATH: /harness/flask-counter.tar
+    - stage:
+        name: Deploy to Local K8s
+        identifier: deploy_to_local_k8s
+        type: Deployment
+        failureStrategies: []
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: flask_counter
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: flask_counter_image
+                      sources:
+                        - identifier: flask_counter_image
+                          type: DockerRegistry
+                          spec:
+                            connectorRef: account.dockerharness
+                            imagePath: <+pipeline.variables.image_repo>
+                            tag: <+input>.default(latest)
+          environment:
+            environmentRef: local_k8s
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: flask_app_namespace
+          execution:
+            steps:
+              - step:
+                  identifier: rolling_deploy
+                  name: Rolling deploy
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  description: Translates kubectl apply of the three manifests plus rollout restart + rollout status. The rollout-status wait matches the step timeout; pruning is off because plain kubectl apply never deleted unmanaged resources.
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+            rollbackSteps:
+              - step:
+                  identifier: rolling_rollback
+                  name: Rolling rollback
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  description: The CircleCI job had no rollback logic; this step is provided for manual rollback of a failed deployment only (no automatic StageRollback failure strategy is configured, matching the source).
+                  spec: {}
