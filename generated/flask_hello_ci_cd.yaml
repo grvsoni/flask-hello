@@ -298,7 +298,15 @@ pipeline:
         name: Deploy to Local K8s
         identifier: deploy_to_local_k8s
         type: Deployment
-        failureStrategies: []
+        # Live plan creation requires >= 1 stage failure strategy. The CircleCI
+        # job simply failed without rollback, so: fail fast (Abort), no
+        # StageRollback. rollbackSteps below remain for manual rollback only.
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: Abort
         spec:
           deploymentType: Kubernetes
           service:

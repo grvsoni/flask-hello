@@ -25,9 +25,6 @@ trigger:
     pipeline:
       identifier: flask_hello_ci_cd
       variables:
-        - name: snyk_api_token
-          type: String
-          value: <+secrets.getValue("account.snyk_api_token")>
         - name: har_generic_registry
           type: String
           value: ci-artifacts
