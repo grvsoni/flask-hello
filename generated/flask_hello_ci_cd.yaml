@@ -82,56 +82,44 @@ pipeline:
               - step:
                   identifier: snyk_dependency_scan
                   name: Snyk dependency scan
-                  type: Snyk
-                  description: "Translates snyk/scan (snyk/snyk@2.3.0) over the repository (requirements.txt). The CircleCI \"fail build on high or critical\" jq gate becomes fail_on_severity: high."
-                  spec:
-                    mode: orchestration
-                    config: oss
-                    target:
-                      type: repository
-                      detection: manual
-                      name: flask-hello-cli-deps
-                      variant: <+codebase.branch>
-                      workspace: /harness
-                    auth:
-                      type: apiKey
-                      access_token: <+secrets.getValue("account.snyk_api_token")>
-                    advanced:
-                      fail_on_severity: high
-                      args:
-                        # The STO snyk-job-runner is an isolated container, so the
-                        # install_dependencies venv is not present and Snyk's
-                        # Python OSS scan errors with SNYK-OS-PYTHON-0013
-                        # "Missing required packages". --skip-unresolved scans the
-                        # pinned requirements.txt entries without a live install.
-                        cli: "--skip-unresolved=true"
-              - step:
-                  identifier: generate_snyk_reports
-                  name: Generate Snyk JSON and HTML reports
                   type: Run
-                  description: "Reproduces the CircleCI snyk JSON output + snyk-to-html rendering (when: always) so the artifact uploads below have their files. Not a gate; the Snyk step above owns gating."
+                  description: "Translates snyk/scan (snyk/snyk@2.3.0) + the CircleCI high/critical jq gate. Runs as a Run step (not the STO Snyk step) because Snyk's Python OSS scan needs the dependencies installed in the SAME environment: the STO snyk-job-runner is an isolated container and errored with SNYK-OS-PYTHON-0013 Missing required packages. Here we activate the /harness/venv that install_dependencies populated in this stage (same image, shared workspace), which is exactly how the CircleCI job had them installed. Produces snyk-results.json for the report/upload steps; --severity-threshold=high makes the step exit non-zero on high/critical, enforcing the gate."
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: cimg/python:3.12
+                    shell: Bash
+                    envVariables:
+                      SNYK_TOKEN: <+secrets.getValue("account.snyk_api_token")>
+                    command: |
+                      set -eo pipefail
+                      # Install the standalone Snyk CLI (no Node needed) into the shared workspace.
+                      mkdir -p /harness/bin
+                      curl -sfL https://downloads.snyk.io/cli/stable/snyk-linux -o /harness/bin/snyk
+                      chmod +x /harness/bin/snyk
+                      export PATH="/harness/bin:$PATH"
+                      # Activate the venv that install_dependencies populated so Snyk
+                      # can resolve the installed dependency tree.
+                      source /harness/venv/bin/activate
+                      # Always write the JSON (even when vulns are found) for the report steps,
+                      # then fail the gate on high/critical.
+                      snyk test --json-file-output=snyk-results.json --severity-threshold=high
+              - step:
+                  identifier: generate_snyk_html
+                  name: Render Snyk HTML report
+                  type: Run
+                  description: "Renders snyk-to-html from the JSON produced by snyk_dependency_scan (when: always). Runs on node:22 because snyk-to-html is an npm tool; it does not re-scan. Guarantees both report files exist so the HarUpload steps never fail on a missing file."
                   when:
                     stageStatus: All
                   spec:
                     connectorRef: account.harnessImage
                     image: node:22
                     shell: Bash
-                    envVariables:
-                      SNYK_TOKEN: <+secrets.getValue("account.snyk_api_token")>
                     command: |
                       set -eo pipefail
-                      npm install -g snyk snyk-to-html
-                      set +e
-                      # --skip-unresolved: no installed env in this container
-                      # (same reason as the gate step above).
-                      snyk test --skip-unresolved=true --json-file-output=snyk-results.json
-                      snyk-to-html -i snyk-results.json -o snyk-results.html
-                      # Guarantee both artifacts exist so the HarUpload steps
-                      # below never fail on a missing file, regardless of the
-                      # scan outcome (this step is reporting-only, not a gate).
                       [ -f snyk-results.json ] || echo '{}' > snyk-results.json
+                      npm install -g snyk-to-html
+                      snyk-to-html -i snyk-results.json -o snyk-results.html || true
                       [ -f snyk-results.html ] || echo '<html><body>No Snyk report generated.</body></html>' > snyk-results.html
-                      exit 0
               - step:
                   identifier: upload_snyk_json_report
                   name: Upload Snyk JSON report
