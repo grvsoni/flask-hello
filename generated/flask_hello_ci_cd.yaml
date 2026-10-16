@@ -20,9 +20,16 @@ pipeline:
       type: String
       value: <+input>.default(ci-artifacts)
   stages:
+    # The three CircleCI jobs that were CI work (build-and-test and
+    # build-and-push-image) are merged into ONE CI stage. They share the same
+    # Cloud executor and were joined only by a workspace handoff, so one stage
+    # keeps /harness and the host Docker daemon shared across all steps: the
+    # image built here stays in the daemon for the scanners and the push, with
+    # no cross-container tar transport (the previous separate-stage design
+    # failed because the native tar export never reached the STO scanners).
     - stage:
-        name: Build and Test
-        identifier: build_and_test
+        name: Build Test Scan Push
+        identifier: build_test_scan_push
         type: CI
         spec:
           cloneCodebase: true
@@ -71,19 +78,17 @@ pipeline:
                     advanced:
                       fail_on_severity: medium
                       args:
-                        # Exclude tests plus the venv AND pip cache that the
-                        # install_dependencies step creates under /harness.
-                        # Must be GLOB patterns: bandit runs with an absolute
-                        # root (-r /harness), and relative excludes like
-                        # "tests,venv" do NOT match absolute discovered paths,
-                        # so the venv's vendored packages leak in as ~805 raw
-                        # findings (4 critical / 9 medium) and fail the gate.
+                        # GLOB excludes: bandit runs with an absolute root
+                        # (-r /harness); relative excludes like "tests,venv" match
+                        # nothing, so the venv/pip-cache created by
+                        # install_dependencies would leak in as hundreds of
+                        # findings and fail the gate.
                         cli: "-x '*/venv/*,*/tests/*,*/.cache/*,*/.git/*'"
               - step:
                   identifier: snyk_dependency_scan
                   name: Snyk dependency scan
                   type: Run
-                  description: "Translates snyk/scan (snyk/snyk@2.3.0) + the CircleCI high/critical jq gate. Runs as a Run step (not the STO Snyk step) because Snyk's Python OSS scan needs the dependencies installed in the SAME environment: the STO snyk-job-runner is an isolated container and errored with SNYK-OS-PYTHON-0013 Missing required packages. Here we activate the /harness/venv that install_dependencies populated in this stage (same image, shared workspace), which is exactly how the CircleCI job had them installed. Produces snyk-results.json for the report/upload steps; --severity-threshold=high makes the step exit non-zero on high/critical, enforcing the gate."
+                  description: "Translates snyk/scan (snyk/snyk@2.3.0) + the CircleCI high/critical jq gate. Run step (not the STO Snyk step) because Snyk's Python OSS scan needs the deps installed in the SAME environment; the isolated STO runner errored with SNYK-OS-PYTHON-0013. Activates the /harness/venv install_dependencies populated. Produces snyk-results.json for the report steps; --severity-threshold=high enforces the gate."
                   spec:
                     connectorRef: account.harnessImage
                     image: cimg/python:3.12
@@ -92,22 +97,17 @@ pipeline:
                       SNYK_TOKEN: <+secrets.getValue("account.snyk_api_token")>
                     command: |
                       set -eo pipefail
-                      # Install the standalone Snyk CLI (no Node needed) into the shared workspace.
                       mkdir -p /harness/bin
                       curl -sfL https://downloads.snyk.io/cli/stable/snyk-linux -o /harness/bin/snyk
                       chmod +x /harness/bin/snyk
                       export PATH="/harness/bin:$PATH"
-                      # Activate the venv that install_dependencies populated so Snyk
-                      # can resolve the installed dependency tree.
                       source /harness/venv/bin/activate
-                      # Always write the JSON (even when vulns are found) for the report steps,
-                      # then fail the gate on high/critical.
                       snyk test --json-file-output=snyk-results.json --severity-threshold=high
               - step:
                   identifier: generate_snyk_html
                   name: Render Snyk HTML report
                   type: Run
-                  description: "Renders snyk-to-html from the JSON produced by snyk_dependency_scan (when: always). Runs on node:22 because snyk-to-html is an npm tool; it does not re-scan. Guarantees both report files exist so the HarUpload steps never fail on a missing file."
+                  description: "Renders snyk-to-html from the JSON produced by snyk_dependency_scan (when: always). node:22 because snyk-to-html is an npm tool; it does not re-scan. Guarantees both report files exist so the HarUpload steps never fail on a missing file."
                   when:
                     stageStatus: All
                   spec:
@@ -150,7 +150,7 @@ pipeline:
                   identifier: run_tests
                   name: Run tests
                   type: Run
-                  description: "Translates pytest + store_test_results. Plain Run + JUnit reports instead of the Test Intelligence step: the TI runner wraps/replaces the command, which is incompatible with prep commands such as mkdir/venv activation in one step (observed: test-results was never created, breaking downstream packaging). deliberate difference: CircleCI's parallelism: 2 + `circleci tests split` sharding is deferred -- the suite is one file / 5 tests, so a single run is equivalent in practice."
+                  description: "Translates pytest + store_test_results. Plain Run + JUnit reports instead of the Test Intelligence step (the TI runner drops inline prep commands like mkdir/venv activation). Deliberate difference: CircleCI's parallelism: 2 + `circleci tests split` sharding is deferred -- the suite is one file / 5 tests, so one run is equivalent."
                   spec:
                     connectorRef: account.harnessImage
                     image: cimg/python:3.12
@@ -192,117 +192,81 @@ pipeline:
                     packageVersion: build-<+pipeline.sequenceId>
                     sourcePath: test-results.tgz
                     target: test-results.tgz
-    - stage:
-        name: Build Scan Push Image
-        identifier: build_scan_push_image
-        type: CI
-        spec:
-          cloneCodebase: true
-          platform:
-            os: Linux
-            arch: Amd64
-          runtime:
-            type: Cloud
-            spec: {}
-          execution:
-            steps:
+              # ---- Image build / scan / push (was job build-and-push-image) ----
+              # These run on the Cloud VM host (no step image), so they share the
+              # host Docker daemon and /harness. docker save produces a real
+              # docker archive that the CLI scanners read with the repo's
+              # .trivyignore/.snyk + --ignore-unfixed -- exactly docker-push.sh +
+              # the CircleCI scan gate. No step `when` => they run only if the
+              # test/scan steps above kept the stage green.
               - step:
-                  identifier: get_image_tag
-                  name: Read image version
+                  identifier: build_image
+                  name: Build image and export tar
                   type: Run
-                  description: Reads the VERSION file exactly as docker-push.sh does and exports it. Native build steps cannot read a file, so the tag is produced as an output variable consumed by the build and push steps.
+                  description: "Translates ./docker-push.sh build. Runs on the Cloud VM (no image) to use the host Docker daemon. Logs in to Docker Hub (base-image pull + later push), builds both tags, and docker-saves a tar into shared /harness for the scanners."
                   spec:
-                    connectorRef: account.harnessImage
-                    image: cimg/python:3.12
                     shell: Bash
+                    envVariables:
+                      IMAGE_REPO: <+pipeline.variables.image_repo>
+                      DOCKER_USERNAME: grvsoniharness
+                      DOCKER_PASSWORD: <+secrets.getValue("account.docker-harness-password")>
                     command: |
                       set -eo pipefail
-                      export image_version=$(cat VERSION | tr -d '[:space:]')
-                      echo "image_version=$image_version"
-                    outputVariables:
-                      - name: image_version
-                        type: String
-                        value: image_version
-              - step:
-                  identifier: build_image_tar
-                  name: Build image
-                  type: BuildAndPushDockerRegistry
-                  description: "Translates \"./docker-push.sh build\" (docker build with both tags). PLUGIN_NO_PUSH + PLUGIN_TAR_PATH keeps the payload as a workspace tar so the scans below run before anything is published; caching: false picks the Kaniko engine that supports tar export."
-                  spec:
-                    connectorRef: account.dockerharness
-                    repo: <+pipeline.variables.image_repo>
-                    context: .
-                    dockerfile: Dockerfile
-                    tags:
-                      - v<+execution.steps.get_image_tag.output.outputVariables.image_version>
-                      - latest
-                    caching: false
-                    envVariables:
-                      PLUGIN_NO_PUSH: "true"
-                      PLUGIN_TAR_PATH: /harness/flask-counter.tar
+                      VERSION=$(cat VERSION | tr -d '[:space:]')
+                      IMAGE="$IMAGE_REPO:v$VERSION"
+                      echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+                      docker build -t "$IMAGE" -t "$IMAGE_REPO:latest" .
+                      docker save -o /harness/flask-counter.tar "$IMAGE"
               - parallel:
                   - step:
                       identifier: trivy_image_scan
                       name: Trivy image scan
-                      type: AquaTrivy
-                      description: "Translates the parallel Trivy gate (trivy image --input tar --severity HIGH,CRITICAL). NOTE: the repo .trivyignore entries (vendored setuptools CVEs) cannot carry over; recreate them as Harness STO exemptions if the scan flags those two findings."
+                      type: Run
+                      description: "Translates the parallel Trivy gate. CLI scan of the docker-save tar with --ignore-unfixed and the repo .trivyignore (the native STO step could neither read .trivyignore nor ignore unfixed base-image CVEs). Fails the stage on HIGH/CRITICAL."
                       spec:
-                        mode: orchestration
-                        config: default
-                        target:
-                          type: container
-                          detection: manual
-                          name: <+pipeline.variables.image_repo>
-                          variant: <+codebase.branch>
-                          workspace: /harness/flask-counter.tar
-                        image:
-                          type: local_archive
-                          name: <+pipeline.variables.image_repo>
-                          tag: v<+execution.steps.get_image_tag.output.outputVariables.image_version>
-                          image_path: /harness/flask-counter.tar
-                        advanced:
-                          fail_on_severity: high
+                        shell: Bash
+                        command: |
+                          set -eo pipefail
+                          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /harness/bin
+                          export PATH="/harness/bin:$PATH"
+                          trivy image --input /harness/flask-counter.tar \
+                            --severity HIGH,CRITICAL --exit-code 1 \
+                            --ignore-unfixed --ignorefile /harness/.trivyignore
                   - step:
                       identifier: snyk_image_scan
                       name: Snyk container scan
-                      type: Snyk
-                      description: "Translates the parallel `snyk container test docker-archive:... --severity-threshold=high` gate. NOTE: the repo .snyk policy file (7 expiring Debian ignores, --policy-path) cannot carry over; recreate them as Harness STO exemptions if the scan flags them."
+                      type: Run
+                      description: "Translates the parallel Snyk container gate. CLI scan of the docker-save tar with the repo .snyk policy (--policy-path). Fails the stage on high/critical."
                       spec:
-                        mode: orchestration
-                        config: container
-                        target:
-                          type: container
-                          detection: manual
-                          name: <+pipeline.variables.image_repo>
-                          variant: <+codebase.branch>
-                          workspace: /harness/flask-counter.tar
-                        image:
-                          type: local_archive
-                          name: <+pipeline.variables.image_repo>
-                          tag: v<+execution.steps.get_image_tag.output.outputVariables.image_version>
-                          image_path: /harness/flask-counter.tar
-                        auth:
-                          type: apiKey
-                          access_token: <+secrets.getValue("account.snyk_api_token")>
-                        advanced:
-                          fail_on_severity: high
+                        shell: Bash
+                        envVariables:
+                          SNYK_TOKEN: <+secrets.getValue("account.snyk_api_token")>
+                        command: |
+                          set -eo pipefail
+                          mkdir -p /harness/bin
+                          curl -sfL https://downloads.snyk.io/cli/stable/snyk-linux -o /harness/bin/snyk
+                          chmod +x /harness/bin/snyk
+                          export PATH="/harness/bin:$PATH"
+                          snyk container test "docker-archive:/harness/flask-counter.tar" \
+                            --severity-threshold=high --policy-path=/harness/.snyk
               - step:
                   identifier: push_image
                   name: Push image to Docker Hub
-                  type: BuildAndPushDockerRegistry
-                  description: Translates "./docker-push.sh push" (docker login + push of both tags; replaces DOCKER_USERNAME/DOCKER_PASSWORD with the registry connector). Skipped unless both scans pass, which preserves the scan-then-publish gate of the CircleCI job.
-                  when:
-                    stageStatus: Success
+                  type: Run
+                  description: "Translates ./docker-push.sh push. Runs only if the scans above kept the stage green (no `when` => OnStageSuccess), preserving the scan-then-publish gate. Pushes both tags from the host daemon."
                   spec:
-                    connectorRef: account.dockerharness
-                    repo: <+pipeline.variables.image_repo>
-                    tags:
-                      - v<+execution.steps.get_image_tag.output.outputVariables.image_version>
-                      - latest
-                    caching: false
+                    shell: Bash
                     envVariables:
-                      PLUGIN_PUSH_ONLY: "true"
-                      PLUGIN_SOURCE_TAR_PATH: /harness/flask-counter.tar
+                      IMAGE_REPO: <+pipeline.variables.image_repo>
+                      DOCKER_USERNAME: grvsoniharness
+                      DOCKER_PASSWORD: <+secrets.getValue("account.docker-harness-password")>
+                    command: |
+                      set -eo pipefail
+                      VERSION=$(cat VERSION | tr -d '[:space:]')
+                      IMAGE="$IMAGE_REPO:v$VERSION"
+                      echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+                      docker push "$IMAGE"
+                      docker push "$IMAGE_REPO:latest"
     - stage:
         name: Deploy to Local K8s
         identifier: deploy_to_local_k8s
