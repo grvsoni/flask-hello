@@ -16,12 +16,9 @@ pipeline:
     - name: image_repo
       type: String
       value: grvsoniharness/flask-counter
-    - name: snyk_api_token
-      type: String
-      value: <+input>
     - name: har_generic_registry
       type: String
-      value: <+input>
+      value: <+input>.default("ci-artifacts")
   stages:
     - stage:
         name: Build and Test
@@ -89,7 +86,7 @@ pipeline:
                       workspace: /harness
                     auth:
                       type: apiKey
-                      access_token: <+pipeline.variables.snyk_api_token>
+                      access_token: <+secrets.getValue("account.snyk_api_token")>
                     advanced:
                       fail_on_severity: high
               - step:
@@ -104,7 +101,7 @@ pipeline:
                     image: node:22
                     shell: Bash
                     envVariables:
-                      SNYK_TOKEN: <+pipeline.variables.snyk_api_token>
+                      SNYK_TOKEN: <+secrets.getValue("account.snyk_api_token")>
                     command: |
                       set -eo pipefail
                       npm install -g snyk snyk-to-html
@@ -277,7 +274,7 @@ pipeline:
                           image_path: /harness/flask-counter.tar
                         auth:
                           type: apiKey
-                          access_token: <+pipeline.variables.snyk_api_token>
+                          access_token: <+secrets.getValue("account.snyk_api_token")>
                         advanced:
                           fail_on_severity: high
               - step:
