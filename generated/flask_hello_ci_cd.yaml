@@ -71,11 +71,14 @@ pipeline:
                     advanced:
                       fail_on_severity: medium
                       args:
-                        # Exclude the same paths CircleCI excluded: the repo's
-                        # tests dir and the dependency venv created under
-                        # /harness by install_dependencies (scanning installed
-                        # packages produces ~80 findings and fails the step).
-                        cli: "-x tests,venv"
+                        # Exclude tests plus the venv AND pip cache that the
+                        # install_dependencies step creates under /harness.
+                        # Must be GLOB patterns: bandit runs with an absolute
+                        # root (-r /harness), and relative excludes like
+                        # "tests,venv" do NOT match absolute discovered paths,
+                        # so the venv's vendored packages leak in as ~805 raw
+                        # findings (4 critical / 9 medium) and fail the gate.
+                        cli: "-x '*/venv/*,*/tests/*,*/.cache/*,*/.git/*'"
               - step:
                   identifier: snyk_dependency_scan
                   name: Snyk dependency scan
