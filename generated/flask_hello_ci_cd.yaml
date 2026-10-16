@@ -11,7 +11,7 @@ pipeline:
         build:
           type: branch
           spec:
-            branch: <+input>.default(main)
+            branch: <+input>.default(circleci-project-setup)
   variables:
     - name: image_repo
       type: String
@@ -70,6 +70,12 @@ pipeline:
                       workspace: /harness
                     advanced:
                       fail_on_severity: medium
+                      args:
+                        # Exclude the same paths CircleCI excluded: the repo's
+                        # tests dir and the dependency venv created under
+                        # /harness by install_dependencies (scanning installed
+                        # packages produces ~80 findings and fails the step).
+                        cli: "-x tests,venv"
               - step:
                   identifier: snyk_dependency_scan
                   name: Snyk dependency scan
@@ -138,29 +144,27 @@ pipeline:
               - step:
                   identifier: run_tests
                   name: Run tests
-                  type: Test
-                  description: "Translates pytest + store_test_results. Step-level parallelism: 2 replaces CircleCI parallelism + timing-based `circleci tests split`; each shard writes a unique JUnit path."
-                  strategy:
-                    parallelism: 2
+                  type: Run
+                  description: "Translates pytest + store_test_results. Plain Run + JUnit reports instead of the Test Intelligence step: the TI runner wraps/replaces the command, which is incompatible with prep commands such as mkdir/venv activation in one step (observed: test-results was never created, breaking downstream packaging). deliberate difference: CircleCI's parallelism: 2 + `circleci tests split` sharding is deferred -- the suite is one file / 5 tests, so a single run is equivalent in practice."
                   spec:
                     connectorRef: account.harnessImage
                     image: cimg/python:3.12
                     shell: Bash
                     command: |
                       set -eo pipefail
-                      mkdir -p test-results/<+strategy.iteration>
+                      mkdir -p test-results
                       source /harness/venv/bin/activate
-                      pytest --junitxml=test-results/<+strategy.iteration>/junit.xml
+                      pytest --junitxml=test-results/junit.xml
                     reports:
                       type: JUnit
                       spec:
                         paths:
-                          - test-results/<+strategy.iteration>/junit.xml
+                          - test-results/junit.xml
               - step:
                   identifier: package_test_results
                   name: Package test results
                   type: Run
-                  description: Packs the per-shard JUnit XML into one archive so it can be stored as a single GENERIC package file (HarUpload uploads one file per step).
+                  description: Packs the JUnit XML into one archive so it can be stored as a single GENERIC package file (HarUpload uploads one file per step).
                   when:
                     stageStatus: All
                   spec:

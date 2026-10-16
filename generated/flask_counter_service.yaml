@@ -19,7 +19,7 @@ service:
                 spec:
                   connectorRef: grvsoni_flask_hello
                   repoName: flask-hello
-                  branch: main
+                  branch: circleci-project-setup
                   paths:
                     - k8s
               # The ConfigMap name must stay stable (flask-counter-config) so
