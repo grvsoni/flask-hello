@@ -18,7 +18,7 @@ pipeline:
       value: grvsoniharness/flask-counter
     - name: har_generic_registry
       type: String
-      value: <+input>.default("ci-artifacts")
+      value: <+input>.default(ci-artifacts)
   stages:
     - stage:
         name: Build and Test
