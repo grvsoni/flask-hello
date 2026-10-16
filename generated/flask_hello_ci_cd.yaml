@@ -65,7 +65,7 @@ pipeline:
                     target:
                       type: repository
                       detection: manual
-                      name: <+codebase.repoName>
+                      name: flask-hello
                       variant: <+codebase.branch>
                       workspace: /harness
                     advanced:
