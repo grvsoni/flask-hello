@@ -97,10 +97,13 @@ pipeline:
                       SNYK_TOKEN: <+secrets.getValue("account.snyk_api_token")>
                     command: |
                       set -eo pipefail
-                      mkdir -p /harness/bin
-                      curl -sfL https://downloads.snyk.io/cli/stable/snyk-linux -o /harness/bin/snyk
-                      chmod +x /harness/bin/snyk
-                      export PATH="/harness/bin:$PATH"
+                      # Install the CLI OUTSIDE /harness: /harness is the Docker
+                      # build context, and a binary left in it gets baked into the
+                      # image by `COPY . .` and then flagged by the image scan.
+                      mkdir -p /tmp/tools
+                      curl -sfL https://downloads.snyk.io/cli/stable/snyk-linux -o /tmp/tools/snyk
+                      chmod +x /tmp/tools/snyk
+                      export PATH="/tmp/tools:$PATH"
                       source /harness/venv/bin/activate
                       snyk test --json-file-output=snyk-results.json --severity-threshold=high
               - step:
@@ -227,8 +230,8 @@ pipeline:
                         shell: Bash
                         command: |
                           set -eo pipefail
-                          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /harness/bin
-                          export PATH="/harness/bin:$PATH"
+                          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /tmp/tools
+                          export PATH="/tmp/tools:$PATH"
                           trivy image --input /harness/flask-counter.tar \
                             --severity HIGH,CRITICAL --exit-code 1 \
                             --ignore-unfixed --ignorefile /harness/.trivyignore
@@ -243,10 +246,10 @@ pipeline:
                           SNYK_TOKEN: <+secrets.getValue("account.snyk_api_token")>
                         command: |
                           set -eo pipefail
-                          mkdir -p /harness/bin
-                          curl -sfL https://downloads.snyk.io/cli/stable/snyk-linux -o /harness/bin/snyk
-                          chmod +x /harness/bin/snyk
-                          export PATH="/harness/bin:$PATH"
+                          mkdir -p /tmp/tools
+                          curl -sfL https://downloads.snyk.io/cli/stable/snyk-linux -o /tmp/tools/snyk
+                          chmod +x /tmp/tools/snyk
+                          export PATH="/tmp/tools:$PATH"
                           snyk container test "docker-archive:/harness/flask-counter.tar" \
                             --severity-threshold=high --policy-path=/harness/.snyk
               - step:
