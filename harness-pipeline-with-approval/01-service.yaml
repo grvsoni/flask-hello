@@ -1,0 +1,48 @@
+# Harness Service for the deploy stage, migrated from the CircleCI deploy-to-k8s job.
+# Manifests are fetched from this repository's k8s/ directory through the project
+# Github connector; the primary artifact is the Docker Hub image built and pushed by
+# the CI stage.
+#
+# paths lists EXACTLY the three files the CircleCI deploy job applied
+# (kubectl apply -f k8s/configmap.yaml / k8s/deployment.yaml / k8s/service.yaml).
+# A folder path (paths: [k8s]) would be fetched recursively by Harness and ALSO apply
+# k8s/namespace.yaml and k8s/rbac/circleci-deployer-rbac.yaml.
+service:
+  name: Flask Counter v3
+  identifier: flask_counter_v3
+  orgIdentifier: Demo
+  projectIdentifier: harness
+  serviceDefinition:
+    type: Kubernetes
+    spec:
+      manifests:
+        - manifest:
+            identifier: flask_counter_manifests
+            type: K8sManifest
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: grvsoni_flask_hello
+                  repoName: flask-hello
+                  gitFetchType: Branch
+                  branch: <+pipeline.variables.source_branch>
+                  paths:
+                    - k8s/configmap.yaml
+                    - k8s/deployment.yaml
+                    - k8s/service.yaml
+              # The ConfigMap name must stay stable (flask-counter-config) so the
+              # Deployment's configMapKeyRef keeps resolving.
+              skipResourceVersioning: true
+      artifacts:
+        primary:
+          primaryArtifactRef: flask_counter_image
+          sources:
+            - identifier: flask_counter_image
+              name: flask-counter-image
+              type: DockerRegistry
+              spec:
+                connectorRef: account.dockerharness
+                imagePath: grvsoniharness/flask-counter
+                tag: <+input>.default(latest)
+      variables: []

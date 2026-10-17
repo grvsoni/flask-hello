@@ -1,0 +1,7 @@
+Identifier:      k8s_rancher
+Name:            k8s_rancher
+Type:            K8sCluster
+Description:     Rancher Desktop k3s cluster, via the in-cluster helm-delegate.
+Status:          SUCCESS
+Last Connected:  2026-10-16 17:15:33
+

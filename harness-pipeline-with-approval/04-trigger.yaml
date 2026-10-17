@@ -1,0 +1,41 @@
+# Push trigger, created DISABLED. The CircleCI workflow had no branch/tag filters,
+# so it ran on every push; this mirrors that for the fixes branch. Enable only after
+# the first manual run is verified. Builds the pushed branch and passes the same
+# branch to source_branch so the deployed manifests match the built commit.
+trigger:
+  name: On Push
+  identifier: on_push
+  enabled: false
+  orgIdentifier: Demo
+  projectIdentifier: harness
+  pipelineIdentifier: flask_hello_ci_cd_v3
+  source:
+    type: Webhook
+    spec:
+      type: Github
+      spec:
+        type: Push
+        spec:
+          connectorRef: grvsoni_flask_hello
+          repoName: flask-hello
+          autoAbortPreviousExecutions: false
+          payloadConditions:
+            - key: targetBranch
+              operator: Equals
+              value: circleci-project-setup
+          headerConditions: []
+          actions: []
+  inputYaml: |
+    pipeline:
+      identifier: flask_hello_ci_cd_v3
+      properties:
+        ci:
+          codebase:
+            build:
+              type: branch
+              spec:
+                branch: <+trigger.branch>
+      variables:
+        - name: source_branch
+          type: String
+          value: <+trigger.branch>
