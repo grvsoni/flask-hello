@@ -205,7 +205,12 @@ workflows:
       - build-and-push-image:
           requires:
             - build-and-test
-      # Deploy to the local k8s cluster after the image is published.
-      - deploy-to-k8s:
+      # Manual approval gate before deploying to the local k8s cluster.
+      - approve-deploy:
+          type: approval
           requires:
             - build-and-push-image
+      # Deploy to the local k8s cluster after the image is published and approved.
+      - deploy-to-k8s:
+          requires:
+            - approve-deploy
